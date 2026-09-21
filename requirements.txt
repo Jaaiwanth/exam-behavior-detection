@@ -3,8 +3,14 @@
 # Install with:
 #   pip install -r requirements.txt
 #
-# All version pins are minimum recommended versions.
-# Tested on Python 3.10+, Windows 11.
+# IMPORTANT: mediapipe requires Python 3.10, 3.11, or 3.12.
+# It does NOT support Python 3.13+ as of 2024.
+# If you have Python 3.14+, install using:
+#   py -3.11 -m pip install -r requirements.txt
+# and run scripts with:
+#   py -3.11 src/video_reader.py
+#
+# Tested on Python 3.11, Windows 11.
 
 # ─── Computer Vision ────────────────────────────────────────
 opencv-python>=4.9.0

@@ -80,7 +80,7 @@ Each directory contains a README.md placeholder so Git tracks the structure.
 |-------|--------------------------------------|-------------|
 | 0     | Project setup                        | Complete    |
 | 1     | Video ingestion (OpenCV)             | Complete    |
-| 2     | MediaPipe landmark extraction        | Pending     |
+| 2     | MediaPipe landmark extraction        | Complete    |
 | 3     | Feature engineering                  | Pending     |
 | 4     | Temporal sequence generation         | Pending     |
 | 5     | LSTM baseline                        | Pending     |
@@ -93,7 +93,7 @@ Each directory contains a README.md placeholder so Git tracks the structure.
 
 ## 5. Current Phase
 
-Phase 1 - Video Ingestion - Complete
+Phase 2 - MediaPipe Landmark Extraction - Complete
 
 ---
 
@@ -281,9 +281,128 @@ feat: add video ingestion pipeline (Phase 1)
 
 ---
 
+### Phase 2 - MediaPipe Landmark Extraction
+
+**Objective:** Extract structured face, hand, and pose landmarks from every frame of every video using the MediaPipe Tasks API (mediapipe 1.0+).
+
+#### What was implemented
+
+- `src/mediapipe_processor.py` created with:
+  - `LandmarkProcessor` class (context manager) using:
+    - `FaceLandmarker` (478 landmarks, VIDEO mode, head pose via solvePnP)
+    - `HandLandmarker` (21 landmarks per hand, VIDEO mode)
+    - `PoseLandmarker` (33 landmarks, VIDEO mode)
+  - `FaceResult` dataclass: landmarks (478x3), face_center, left/right eye centers, nose tip, mouth center, yaw/pitch/roll, bbox_px.
+  - `HandResult` dataclass: landmarks (21x3), handedness, wrist, index_tip, middle_tip, ring_tip, pinky_tip, hand_center.
+  - `PoseResult` dataclass: landmarks (33x4), named upper-body points (nose, shoulders, elbows, wrists).
+  - `FrameLandmarks` container: face + left_hand + right_hand + pose per frame.
+  - `process_frame(frame_bgr, frame_index)` - single-frame entry point.
+  - `process_video(video_path, max_frames)` - processes entire video, returns List[FrameLandmarks].
+  - Head pose estimation via OpenCV solvePnP with 6-point anatomical face model.
+  - Graceful handling: all missing detections return detected=False with None fields.
+- `src/visualize_landmarks.py` created with:
+  - `annotate_frame(frame_bgr, result)` - returns annotated frame with all landmarks drawn.
+  - `draw_face()` - eye highlights (green/orange), nose, mouth, face center crosshair, head pose axes.
+  - `draw_hands()` - skeleton + color-coded fingertips (L=green, R=red).
+  - `draw_pose()` - upper-body skeleton.
+  - `draw_hud()` - semi-transparent status panel (frame index, detection status, yaw/pitch/roll).
+  - `run_live()` - live window mode.
+  - `run_save()` - writes annotated video to file.
+- `setup_models.py` created:
+  - Downloads face_landmarker.task (3.6 MB), hand_landmarker.task (7.5 MB), pose_landmarker.task (5.5 MB) from Google CDN.
+  - Skips already-downloaded files.
+
+**Important Python version note:** mediapipe 1.0+ requires Python 3.10-3.12. This project uses Python 3.11.
+All scripts must be run with `py -3.11` on machines with Python 3.14 as default.
+
+#### Files created / modified
+
+| File | Status |
+|------|--------|
+| `src/mediapipe_processor.py` | Created |
+| `src/visualize_landmarks.py` | Created |
+| `setup_models.py` | Created |
+| `models/face_landmarker.task` | Downloaded (not committed) |
+| `models/hand_landmarker.task` | Downloaded (not committed) |
+| `models/pose_landmarker.task` | Downloaded (not committed) |
+| `.gitignore` | Updated (added *.task) |
+| `requirements.txt` | Updated (Python version note) |
+| `implementation.md` | Updated |
+
+#### Tests performed
+
+1. Ran `py -3.11 setup_models.py` - downloaded all 3 model files.
+2. Ran `py -3.11 src/mediapipe_processor.py --video dataset/movements/eye_rubbing/eye_rubbing_001.mp4`.
+3. Verified face detection on all 150 frames.
+4. Verified hand detection (right hand dominant for eye rubbing - expected).
+5. Verified pose detection on all 150 frames.
+6. Verified head pose angles are physically plausible (yaw ~+5deg, pitch ~-16deg, roll ~-12deg for looking slightly down).
+
+#### Test results
+
+```
+eye_rubbing_001.mp4 | 150 frames | face 150/150 | L-hand 20/150 | R-hand 123/150 | pose 150/150
+
+Detection rates over 150 frames:
+  Face:       100.0%
+  Left hand:   13.3%
+  Right hand:  82.0%   <- dominant hand rubbing right eye
+  Pose:       100.0%
+
+Head pose (frame 0): Yaw=+5.1deg  Pitch=-17.6deg  Roll=-11.8deg
+```
+
+Results are physically plausible for the eye_rubbing behaviour (subject looking slightly down-right, right hand near eye).
+
+#### Problems encountered
+
+1. mediapipe 1.0.1 removed the legacy mp.solutions API entirely.
+   Initial implementation used the old API and failed to import.
+
+2. Default Python on this machine is 3.14; mediapipe requires 3.10-3.12.
+   pip install was initially targeting Python 3.14 and failing silently.
+
+3. ModuleNotFoundError for 'src' when running scripts directly with py -3.11.
+
+#### Solutions
+
+1. Rewrote mediapipe_processor.py to use the Tasks API (FaceLandmarker,
+   HandLandmarker, PoseLandmarker with VIDEO running mode).
+
+2. Used `py -3.11 -m pip install mediapipe` to target Python 3.11 explicitly.
+   Updated requirements.txt with a clear Python version warning.
+
+3. Added sys.path.insert at the top of each script to add the project root.
+
+#### Design decisions
+
+1. Tasks API (mediapipe 1.0+) over legacy solutions API - future-proof;
+   the legacy API is fully removed in 1.0+.
+
+2. VIDEO running mode, not IMAGE mode - enables landmark tracking across
+   frames (lower jitter, better temporal consistency for the LSTM).
+
+3. Timestamp = frame_index * 33ms - assumes ~30fps spacing for the video
+   timeline. This is a simplification but sufficient for VIDEO mode tracking.
+
+4. HAND_CONNECTIONS defined as a module-level constant - avoids dependency
+   on mp.solutions.hands in the visualizer.
+
+5. setup_models.py as a separate utility - model files are large binary
+   assets that should not be downloaded automatically during import.
+
+#### Remaining work
+
+Proceed to Phase 3 - Feature Engineering.
+
+#### Suggested Git commit message
+
+feat: add MediaPipe landmark extraction (Phase 2)
+
+---
+
 ## 7. Pending Phases
 
-- Phase 2 - MediaPipe landmark extraction
 - Phase 3 - Feature engineering
 - Phase 4 - Temporal sequence generation
 - Phase 5 - LSTM baseline
