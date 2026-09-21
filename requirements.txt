@@ -1,0 +1,46 @@
+# requirements.txt — Exam Behavior Detection
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# All version pins are minimum recommended versions.
+# Tested on Python 3.10+, Windows 11.
+
+# ─── Computer Vision ────────────────────────────────────────
+opencv-python>=4.9.0
+
+# ─── Landmark Extraction ────────────────────────────────────
+mediapipe>=0.10.9
+
+# ─── Numerical Computing ────────────────────────────────────
+numpy>=1.26.0
+scipy>=1.12.0
+
+# ─── Data Handling ──────────────────────────────────────────
+pandas>=2.2.0
+
+# ─── Deep Learning ──────────────────────────────────────────
+# TensorFlow/Keras (Phase 5 — LSTM baseline)
+tensorflow>=2.16.0
+# If you prefer PyTorch instead, comment the line above and use:
+# torch>=2.3.0
+# torchvision>=0.18.0
+
+# ─── Machine Learning Utilities ─────────────────────────────
+scikit-learn>=1.4.0
+
+# ─── Visualisation ──────────────────────────────────────────
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# ─── Object Detection (Phase 7 — YOLO) ──────────────────────
+# Uncomment when Phase 7 is reached:
+# ultralytics>=8.2.0
+
+# ─── API / Dashboard (Phase 9) ──────────────────────────────
+# Uncomment when Phase 9 is reached:
+# fastapi>=0.111.0
+# uvicorn[standard]>=0.29.0
+
+# ─── Utilities ──────────────────────────────────────────────
+tqdm>=4.66.0
