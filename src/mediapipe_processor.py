@@ -513,7 +513,7 @@ class LandmarkProcessor:
             )
         )
 
-        self._frame_timestamp_ms = 0
+        self._next_timestamp_ms: int = 1  # session-level monotonic counter
         logger.info("LandmarkProcessor initialised (face + hands + pose)")
 
     @staticmethod
@@ -544,6 +544,19 @@ class LandmarkProcessor:
         self._pose_landmarker.close()
         logger.debug("LandmarkProcessor closed")
 
+    def reset_timestamps(self) -> None:
+        """
+        Reset the internal timestamp counter.
+
+        Call this between videos ONLY if you are sure you want to start a new
+        independent tracking session — note that after reset the Tasks API
+        trackers lose any cross-frame tracking state.
+        NOT needed for normal multi-video batch processing (the monotonic
+        counter handles that automatically).
+        """
+        self._next_timestamp_ms = 1
+        logger.debug("Timestamp counter reset")
+
     # ------------------------------------------------------------------
     # Single-frame processing
     # ------------------------------------------------------------------
@@ -573,18 +586,14 @@ class LandmarkProcessor:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-        # Each frame needs a strictly increasing timestamp (milliseconds)
-        self._frame_timestamp_ms = frame_index * 33  # assume ~30fps spacing
+        # Strictly increasing timestamp across the whole session (ms).
+        # MediaPipe VIDEO mode requires this to never decrease.
+        ts_ms = self._next_timestamp_ms
+        self._next_timestamp_ms += 33  # ~30 fps spacing
 
-        face_res = self._face_landmarker.detect_for_video(
-            mp_image, self._frame_timestamp_ms
-        )
-        hand_res = self._hand_landmarker.detect_for_video(
-            mp_image, self._frame_timestamp_ms
-        )
-        pose_res = self._pose_landmarker.detect_for_video(
-            mp_image, self._frame_timestamp_ms
-        )
+        face_res = self._face_landmarker.detect_for_video(mp_image, ts_ms)
+        hand_res = self._hand_landmarker.detect_for_video(mp_image, ts_ms)
+        pose_res = self._pose_landmarker.detect_for_video(mp_image, ts_ms)
 
         face = _extract_face(face_res, w, h)
         left_hand, right_hand = _extract_hands(hand_res)

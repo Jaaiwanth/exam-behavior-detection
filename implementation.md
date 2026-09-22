@@ -81,7 +81,7 @@ Each directory contains a README.md placeholder so Git tracks the structure.
 | 0     | Project setup                        | Complete    |
 | 1     | Video ingestion (OpenCV)             | Complete    |
 | 2     | MediaPipe landmark extraction        | Complete    |
-| 3     | Feature engineering                  | Pending     |
+| 3     | Feature engineering                  | Complete    |
 | 4     | Temporal sequence generation         | Pending     |
 | 5     | LSTM baseline                        | Pending     |
 | 6     | Model evaluation                     | Pending     |
@@ -93,7 +93,7 @@ Each directory contains a README.md placeholder so Git tracks the structure.
 
 ## 5. Current Phase
 
-Phase 2 - MediaPipe Landmark Extraction - Complete
+Phase 3 - Feature Engineering - Complete
 
 ---
 
@@ -401,9 +401,121 @@ feat: add MediaPipe landmark extraction (Phase 2)
 
 ---
 
+### Phase 3 - Feature Engineering
+
+**Objective:** Convert per-frame `FrameLandmarks` objects into flat, normalised numerical feature vectors (38 scalars/frame) that the LSTM can train on.
+
+#### What was implemented
+
+- `src/feature_extractor.py` created with:
+  - **38 features per frame** across 10 groups:
+    1. Head pose (3): yaw, pitch, roll — clamped ±90°/±45° against solvePnP flips
+    2. Eye geometry (4): left/right EAR, gaze_x, gaze_y
+    3. Mouth openness (1): chin-mouth gap / IOD
+    4. Face–hand proximity (4): L/R index-tip & palm-center → nose tip, normalised by inter-ocular distance
+    5. Hand pose (4): left/right wrist x, wrist y
+    6. Finger curl — right hand (5): per-finger angle at PIP joint, 0=extended 1=curled
+    7. Hand velocity (4): Δwrist_x, Δwrist_y for L/R from previous frame
+    8. Head velocity (3): Δyaw, Δpitch, Δroll — clamped ±30°/frame
+    9. Pose geometry (6): shoulder width, elbow angles L/R, wrist heights L/R, torso angle
+    10. Detection flags (4): face/L-hand/R-hand/pose binary
+  - `FEATURE_NAMES` — ordered list of all 38 feature names
+  - `N_FEATURES = 38` — feature count constant
+  - `extract_frame_features(result, prev_result)` — single frame → (38,) float32
+  - `extract_video_features(results)` — list of FrameLandmarks → (T, 38) float32
+  - `FeatureExtractorPipeline.run(video_path)` — end-to-end: video → (T, 38)
+  - `extract_dataset_features(root, output_dir)` — batch: all videos → .npy files + manifest.csv
+  - IOD (inter-ocular distance) used as scale normaliser for all spatial distances
+- Fixed bug in `mediapipe_processor.py`: monotonic timestamp now uses a session-level counter (`_next_timestamp_ms`) instead of `frame_index * 33`, so multiple videos can share one `LandmarkProcessor` instance without the 'monotonically increasing' error.
+
+#### Files created / modified
+
+| File | Status |
+|------|--------|
+| `src/feature_extractor.py` | Created |
+| `src/mediapipe_processor.py` | Fixed (monotonic timestamp) |
+| `outputs/frame_features/*.npy` | Generated at runtime (11 files, not committed) |
+| `outputs/frame_features/manifest.csv` | Generated at runtime (not committed) |
+| `implementation.md` | Updated |
+
+#### Tests performed
+
+1. Single-video test: `py -3.11 src/feature_extractor.py --video dataset/movements/eye_rubbing/eye_rubbing_001.mp4`
+2. Full dataset batch: `py -3.11 src/feature_extractor.py --dataset dataset --output outputs/frame_features --overwrite`
+3. Verified all 38 features populated with physically plausible values.
+4. Verified IOD normalisation keeps spatial distances in [0, ~3] range.
+5. Verified solvePnP flip suppression (yaw clamped to [-90, +90]).
+
+#### Test results
+
+```
+All 11/11 videos extracted successfully — zero failures.
+
+Per-video landmark detection (face / hands / pose):
+  adjusting_glasses:  face 150/150 | L 150  R 134 | pose 150/150
+  drinking_water:     face   0/150 | L  61  R  20 | pose 137/150  (face occluded by bottle)
+  eye_rubbing:        face 150/150 | L  20  R 123 | pose 150/150
+  scratching_face:    face 150/150 | L 126  R  47 | pose 150/150
+  yawning:            face 146/146 | L  35  R   1 | pose 146/146
+  looking_at_screen:  face 149/149 | L  77  R   0 | pose 149/149
+  looking_down:       face 150/150 | L   0  R  12 | pose 150/150
+  looking_behind:     face  78/150 | L   0  R  14 | pose 150/150  (face turns away)
+  prolonged_away:     face 149/150 | L   0  R   0 | pose 150/150
+  repeated_left:      face 141/149 | L   0  R   0 | pose 149/149
+  repeated_right:     face 149/150 | L   0  R   0 | pose 149/150
+
+Outputs: 11 .npy files in outputs/frame_features/
+Manifest: outputs/frame_features/manifest.csv
+```
+
+All detection rates are physically plausible for each behaviour class.
+
+#### Problems encountered
+
+1. solvePnP 180° flip artefact on extreme angles
+   — face_yaw had min/max of -185°/+185° on first run.
+
+2. Gaze vector was being over-scaled by IOD; values up to ±0.98.
+
+3. 'Input timestamp must be monotonically increasing' error on video 2+
+   — LandmarkProcessor was reusing frame_index * 33 which reset to 0 for each new video.
+
+#### Solutions
+
+1. Clamped head pose: yaw/pitch ±90°, roll ±45°. Velocity: ±30°/frame.
+
+2. Clamped gaze_x/gaze_y to [-1, 1].
+
+3. Replaced per-video timestamp with `_next_timestamp_ms` session counter
+   (starts at 1, increments +33ms per frame, never resets between videos).
+
+#### Design decisions
+
+1. IOD as normalisation scale — inter-ocular distance is stable frame-to-frame and
+   cancels camera distance variation, making features scene-invariant.
+
+2. Right-hand finger curl only — the model currently uses right-hand curls.
+   Left hand curl could be added; dataset shows left-hand dominance in only
+   a few classes (adjusting_glasses, scratching_face).
+
+3. Detection flags as features — binary flags allow the LSTM to learn that
+   certain behaviours consistently show/hide certain modalities.
+
+4. Velocity features zeroed for frame 0 — prevents the first frame of each
+   video from having garbage velocity from a previous (different) video.
+
+#### Remaining work
+
+Proceed to Phase 4 - Temporal Sequence Generation.
+
+#### Suggested Git commit message
+
+feat: add feature engineering pipeline (Phase 3)
+
+---
+
 ## 7. Pending Phases
 
-- Phase 3 - Feature engineering
 - Phase 4 - Temporal sequence generation
 - Phase 5 - LSTM baseline
 - Phase 6 - Model evaluation
