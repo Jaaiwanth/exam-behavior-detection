@@ -108,11 +108,15 @@ FEATURE_NAMES: List[str] = [
     # 3. Mouth geometry (1)
     "mouth_open",            # mouth openness normalised by IOD
 
-    # 4. Face–hand proximity (4)
+    # 4. Face–hand proximity (8)
     "lhand_index_to_nose",   # distance from left index tip to nose, / IOD
     "rhand_index_to_nose",   # distance from right index tip to nose, / IOD
     "lhand_palm_to_nose",    # distance from left palm center to nose, / IOD
     "rhand_palm_to_nose",    # distance from right palm center to nose, / IOD
+    "lhand_palm_to_left_eye",
+    "rhand_palm_to_right_eye",
+    "lhand_palm_to_mouth",
+    "rhand_palm_to_mouth",
 
     # 5. Hand pose — absolute position (4)
     "lwrist_x",
@@ -127,11 +131,13 @@ FEATURE_NAMES: List[str] = [
     "rcurl_ring",
     "rcurl_pinky",
 
-    # 7. Hand velocity (4) — Δ from previous frame
+    # 7. Hand velocity (6) — Δ from previous frame
     "dlwrist_x",
     "dlwrist_y",
+    "lhand_speed",
     "drwrist_x",
     "drwrist_y",
+    "rhand_speed",
 
     # 8. Head velocity (3) — Δ from previous frame
     "dyaw",
@@ -153,7 +159,7 @@ FEATURE_NAMES: List[str] = [
     "pose_detected",
 ]
 
-N_FEATURES: int = len(FEATURE_NAMES)   # must equal 38
+N_FEATURES: int = len(FEATURE_NAMES)   # must equal 44
 
 
 # ---------------------------------------------------------------------------
@@ -358,16 +364,27 @@ def extract_frame_features(
         feat.append(0.0)
 
     # ------------------------------------------------------------------
-    # 4. Face–hand proximity  (4)
+    # 4. Face–hand proximity  (8)
     # ------------------------------------------------------------------
     nose = face.nose_tip if face.detected else None
+    left_eye = face.left_eye_center if face.detected else None
+    right_eye = face.right_eye_center if face.detected else None
+    mouth = face.mouth_center if face.detected else None
 
     lh_index_to_nose = _dist(lh.index_tip, nose)  / iod if nose is not None else 0.0
     rh_index_to_nose = _dist(rh.index_tip, nose)  / iod if nose is not None else 0.0
     lh_palm_to_nose  = _dist(lh.hand_center, nose) / iod if nose is not None else 0.0
     rh_palm_to_nose  = _dist(rh.hand_center, nose) / iod if nose is not None else 0.0
+    
+    lh_palm_to_left_eye = _dist(lh.hand_center, left_eye) / iod if left_eye is not None else 0.0
+    rh_palm_to_right_eye = _dist(rh.hand_center, right_eye) / iod if right_eye is not None else 0.0
+    lh_palm_to_mouth = _dist(lh.hand_center, mouth) / iod if mouth is not None else 0.0
+    rh_palm_to_mouth = _dist(rh.hand_center, mouth) / iod if mouth is not None else 0.0
 
-    feat += [lh_index_to_nose, rh_index_to_nose, lh_palm_to_nose, rh_palm_to_nose]
+    feat += [
+        lh_index_to_nose, rh_index_to_nose, lh_palm_to_nose, rh_palm_to_nose,
+        lh_palm_to_left_eye, rh_palm_to_right_eye, lh_palm_to_mouth, rh_palm_to_mouth
+    ]
 
     # ------------------------------------------------------------------
     # 5. Hand pose — wrist positions  (4)
@@ -395,22 +412,24 @@ def extract_frame_features(
         feat += [0.0, 0.0, 0.0, 0.0, 0.0]
 
     # ------------------------------------------------------------------
-    # 7. Hand velocity  (4)
+    # 7. Hand velocity  (6)
     # ------------------------------------------------------------------
     prev_lwrist = (prev_lh.wrist if prev_lh is not None and prev_lh.detected else None)
     prev_rwrist = (prev_rh.wrist if prev_rh is not None and prev_rh.detected else None)
 
     if lwrist is not None and prev_lwrist is not None:
         dlw = lwrist - prev_lwrist
-        feat += [float(dlw[0]), float(dlw[1])]
+        speed_l = float(np.linalg.norm(dlw))
+        feat += [float(dlw[0]), float(dlw[1]), speed_l]
     else:
-        feat += [0.0, 0.0]
+        feat += [0.0, 0.0, 0.0]
 
     if rwrist is not None and prev_rwrist is not None:
         drw = rwrist - prev_rwrist
-        feat += [float(drw[0]), float(drw[1])]
+        speed_r = float(np.linalg.norm(drw))
+        feat += [float(drw[0]), float(drw[1]), speed_r]
     else:
-        feat += [0.0, 0.0]
+        feat += [0.0, 0.0, 0.0]
 
     # ------------------------------------------------------------------
     # 8. Head velocity  (3)

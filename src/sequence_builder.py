@@ -68,8 +68,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_FEATURES_DIR = Path("outputs/frame_features")
 DEFAULT_OUTPUT_DIR   = Path("outputs/sequences")
-DEFAULT_WINDOW_SIZE  = 30   # frames  (~1 second at 30 fps)
-DEFAULT_STRIDE       = 10   # frames  (75% overlap)
+DEFAULT_WINDOW_SIZE  = 45   # frames  (~1.5 seconds at 30 fps)
+DEFAULT_STRIDE       = 3    # frames  (high overlap for more data)
 DEFAULT_VAL_SPLIT    = 0.15
 DEFAULT_TEST_SPLIT   = 0.15
 DEFAULT_SEED         = 42
@@ -179,28 +179,66 @@ def video_level_split(
     val_frac: float,
     test_frac: float,
     seed: int,
+    labels: Optional[List[str]] = None,
 ) -> Tuple[List[int], List[int], List[int]]:
     """
-    Randomly assign video indices to train / val / test splits.
+    Assign video indices to train / val / test splits, **stratified by class**.
 
-    Splitting is done at the video level (not window level) to prevent
-    data leakage — windows from the same video never appear in both
-    train and val/test.
+    When *labels* is provided, the split is done per-class so that every class
+    has at least one video in training.  For classes with ≥3 videos, one video
+    goes to val, one to test, and the rest to train.  For classes with 2
+    videos: 1 train + 1 val-or-test (alternating).  For classes with 1 video:
+    train only.
+
+    Splitting at the video level prevents data leakage — overlapping windows
+    from the same video never appear in both train and val/test.
 
     Returns
     -------
     train_idx, val_idx, test_idx : lists of video indices
     """
     rng = np.random.default_rng(seed)
-    indices = np.arange(n_videos)
-    rng.shuffle(indices)
 
-    n_test = max(1, int(n_videos * test_frac))
-    n_val  = max(1, int(n_videos * val_frac))
+    if labels is None:
+        # Fallback: non-stratified shuffle (original behaviour)
+        indices = np.arange(n_videos)
+        rng.shuffle(indices)
+        n_test = max(1, int(n_videos * test_frac))
+        n_val  = max(1, int(n_videos * val_frac))
+        test_idx  = indices[:n_test].tolist()
+        val_idx   = indices[n_test : n_test + n_val].tolist()
+        train_idx = indices[n_test + n_val :].tolist()
+        return train_idx, val_idx, test_idx
 
-    test_idx  = indices[:n_test].tolist()
-    val_idx   = indices[n_test : n_test + n_val].tolist()
-    train_idx = indices[n_test + n_val :].tolist()
+    # --- Stratified split ---
+    from collections import defaultdict
+    class_indices: Dict[str, List[int]] = defaultdict(list)
+    for i, lbl in enumerate(labels):
+        class_indices[lbl].append(i)
+
+    train_idx, val_idx, test_idx = [], [], []
+    toggle = 0  # alternator for 2-video classes
+
+    for cls in sorted(class_indices):
+        idxs = class_indices[cls].copy()
+        rng.shuffle(idxs)
+
+        if len(idxs) >= 3:
+            # At least 1 val, 1 test, rest train
+            test_idx.append(idxs[0])
+            val_idx.append(idxs[1])
+            train_idx.extend(idxs[2:])
+        elif len(idxs) == 2:
+            # 1 train + 1 val-or-test (alternate between classes)
+            train_idx.append(idxs[0])
+            if toggle % 2 == 0:
+                val_idx.append(idxs[1])
+            else:
+                test_idx.append(idxs[1])
+            toggle += 1
+        else:
+            # Only 1 video — must go to train
+            train_idx.extend(idxs)
 
     return train_idx, val_idx, test_idx
 
@@ -297,7 +335,7 @@ def build_sequences(
 
     # 2. Video-level split
     train_idx, val_idx, test_idx = video_level_split(
-        n_videos, val_split, test_split, seed
+        n_videos, val_split, test_split, seed, labels=str_labels
     )
     logger.info("Split  → train: %d videos | val: %d | test: %d",
                 len(train_idx), len(val_idx), len(test_idx))
@@ -319,7 +357,7 @@ def build_sequences(
             y_parts.append(np.full(wins.shape[0], label, dtype=np.int32))
 
         if not X_parts:
-            F = matrices[0].shape[1] if matrices else 38
+            F = matrices[0].shape[1] if matrices else 44
             return (np.empty((0, window_size, F), dtype=np.float32),
                     np.empty(0, dtype=np.int32))
 
@@ -381,19 +419,19 @@ def _print_summary(
     print(f"  Stride      : {stride} frames  ({100*(1-stride/window_size):.0f}% overlap)")
     print(f"  Standardised: {'yes' if standardise else 'no'}")
     print(f"  Output dir  : {output_dir}")
-    print(f"{'─'*62}")
+    print(f"{'-'*62}")
     print(f"  {'Split':<10} {'Videos':>7} {'Windows':>9} {'Shape':>20}")
-    print(f"  {'─'*56}")
+    print(f"  {'-'*56}")
     print(f"  {'train':<10} {len(train_idx):>7} {len(X_train):>9}   {str(X_train.shape)}")
     print(f"  {'val':<10} {len(val_idx):>7}   {len(X_val):>7}   {str(X_val.shape)}")
     print(f"  {'test':<10} {len(test_idx):>7}   {len(X_test):>7}   {str(X_test.shape)}")
     print(f"  {'TOTAL':<10} {'':>7} {total:>9}")
-    print(f"{'─'*62}")
+    print(f"{'-'*62}")
     print(f"\n  Class distribution (train windows):")
     if len(y_train) > 0:
         for cls_id, lbl in sorted(int_to_label.items()):
             count = int((y_train == cls_id).sum())
-            bar = "█" * (count // max(1, len(y_train) // 30))
+            bar = "#" * (count // max(1, len(y_train) // 30))
             print(f"    [{cls_id:2d}] {lbl:<28} {count:>5}  {bar}")
     print()
 
