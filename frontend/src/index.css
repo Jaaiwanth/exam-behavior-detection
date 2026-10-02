@@ -1,0 +1,136 @@
+﻿/* src/index.css — Global design system */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* ──────────────────────── Tokens ──────────────────────── */
+:root {
+  --bg-base:      #0d0f1a;
+  --bg-card:      #141728;
+  --bg-surface:   #1a1f36;
+  --bg-hover:     #212640;
+  --border:       #2a2f4e;
+  --border-light: #373d62;
+
+  --text-primary:   #e8eaf6;
+  --text-secondary: #8891b4;
+  --text-muted:     #4e5478;
+
+  --accent:       #5865f2;
+  --accent-light: #7c89ff;
+  --accent-glow:  rgba(88, 101, 242, 0.25);
+
+  --ok:      #2dd4bf;
+  --ok-bg:   rgba(45, 212, 191, 0.12);
+  --warn:    #f59e0b;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --danger:  #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.12);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 20px var(--accent-glow);
+}
+
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ──────────────────────── Scrollbar ──────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+/* ──────────────────────── Utility ──────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.badge-ok     { background: var(--ok-bg);     color: var(--ok); }
+.badge-warn   { background: var(--warn-bg);   color: var(--warn); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-muted  { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot-ok     { background: var(--ok); }
+.dot-warn   { background: var(--warn); }
+.dot-danger { background: var(--danger); animation: pulse-dot 1s ease-in-out infinite; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg-surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ──────────────────────── Animations ──────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes warning-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.fade-in  { animation: fade-in  0.3s ease both; }
+.slide-in { animation: slide-in 0.25s ease both; }
