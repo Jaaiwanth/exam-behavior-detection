@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { User, ArrowLeft } from "lucide-react";
 
 export default function StudentAuth() {
   const navigate = useNavigate();
@@ -110,87 +111,99 @@ export default function StudentAuth() {
 
   return (
     <div className="auth-root">
-      <div className="auth-bg" />
-      <div className="auth-card">
-        <button className="back-btn" onClick={() => navigate("/")}>← Back</button>
+      <div className="auth-panel-left">
+        <div className="auth-card">
+          <button className="back-btn" onClick={() => navigate("/")}>
+            <ArrowLeft size={16} />
+            <span>Back to Portal Selection</span>
+          </button>
 
-        <div className="auth-header">
-          <span className="auth-icon">👨‍🎓</span>
-          <h2>{mode === "login" ? "Student Login" : "Student Sign Up"}</h2>
-          <p>{mode === "login" ? "Sign in with your registration number" : "Create your student account"}</p>
-        </div>
+          <div className="auth-header">
+            <h2>{mode === "login" ? "Student Login" : "Student Sign Up"}</h2>
+            <p>{mode === "login" ? "Sign in with your registration number" : "Create your student account"}</p>
+          </div>
 
-        {error   && <div className="alert error">{error}</div>}
-        {success && <div className="alert success">{success}</div>}
+          {error   && <div className="alert error">{error}</div>}
+          {success && <div className="alert success">{success}</div>}
 
-        <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
-          {mode === "signup" && (
+          <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
+            {mode === "signup" && (
+              <div className="field">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Jaaiwanth S"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="field">
-              <label>Full Name</label>
+              <label>Registration Number</label>
               <input
                 type="text"
-                placeholder="e.g. Jaaiwanth S"
-                value={name}
-                onChange={e => setName(e.target.value)}
+                placeholder="e.g. RA2011003010234"
+                value={regNo}
+                onChange={e => setRegNo(e.target.value)}
               />
             </div>
-          )}
 
-          <div className="field">
-            <label>Registration Number</label>
-            <input
-              type="text"
-              placeholder="e.g. RA2011003010234"
-              value={regNo}
-              onChange={e => setRegNo(e.target.value)}
-            />
-          </div>
+            {mode === "signup" && (
+              <div className="field">
+                <label>Email Address</label>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+            )}
 
-          {mode === "signup" && (
+            {mode === "login" && (
+              <div className="field">
+                <label>Email Address <span className="field-hint">(needed to look up your account)</span></label>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="field">
-              <label>Email Address</label>
+              <label>Password</label>
               <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                type="password"
+                placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
               />
             </div>
-          )}
 
-          {mode === "login" && (
-            <div className="field">
-              <label>Email Address <span className="field-hint">(needed to look up your account)</span></label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
-            </div>
-          )}
+            <button type="submit" className="submit-btn" disabled={loading}>
+              {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
+            </button>
+          </form>
 
-          <div className="field">
-            <label>Password</label>
-            <input
-              type="password"
-              placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
+          <div className="auth-switch">
+            {mode === "login" ? (
+              <>Don&apos;t have an account? <button onClick={() => { setMode("signup"); clearMessages(); }}>Sign up</button></>
+            ) : (
+              <>Already have an account? <button onClick={() => { setMode("login"); clearMessages(); }}>Log in</button></>
+            )}
           </div>
-
-          <button type="submit" className="submit-btn student-btn" disabled={loading}>
-            {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
-          </button>
-        </form>
-
-        <div className="auth-switch">
-          {mode === "login" ? (
-            <>Don&apos;t have an account? <button onClick={() => { setMode("signup"); clearMessages(); }}>Sign up</button></>
-          ) : (
-            <>Already have an account? <button onClick={() => { setMode("login"); clearMessages(); }}>Log in</button></>
-          )}
+        </div>
+      </div>
+      <div className="auth-panel-right">
+        <div className="brand-content">
+          <div className="brand-logo">
+            <span className="logo-icon"><User size={48} color="#0ea5e9" /></span>
+            <h1 className="logo-title">Student Portal</h1>
+          </div>
+          <p className="brand-tagline">Access your enrolled courses, take active examinations, and review your academic performance in a secure environment.</p>
         </div>
       </div>
     </div>

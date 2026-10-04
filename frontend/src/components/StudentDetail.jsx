@@ -59,7 +59,10 @@ export default function StudentDetail({ course, student, exams, initialExamId, o
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={onBack}>← Students</button>
+          <button className="back-link" onClick={onBack}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>Students</span>
+          </button>
           <h1>{student.name}</h1>
           <p>{student.reg_no} · {student.email} · {course.name}</p>
         </div>

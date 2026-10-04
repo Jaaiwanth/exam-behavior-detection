@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
+import { GraduationCap } from "lucide-react";
 import { auth, db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import StudentDetail from "../components/StudentDetail.jsx";
@@ -319,7 +320,7 @@ export default function MentorDashboard() {
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-icon">🎓</span>
+          <span className="brand-icon"><GraduationCap size={32} color="#0ea5e9" /></span>
           <span className="brand-name">ExamProctor</span>
         </div>
 
@@ -338,14 +339,14 @@ export default function MentorDashboard() {
             className={`nav-item ${activeTab === "courses" ? "active" : ""}`}
             onClick={() => setActiveTab("courses")}
           >
-            📚 Courses
+            Courses
           </button>
           {selectedCourse && (
             <button
               className={`nav-item sub ${activeTab === "exams" ? "active" : ""}`}
               onClick={() => setActiveTab("exams")}
             >
-              📝 Exams
+              Exams
             </button>
           )}
           {selectedCourse && (
@@ -353,7 +354,7 @@ export default function MentorDashboard() {
               className={`nav-item sub ${activeTab === "students" ? "active" : ""}`}
               onClick={openStudents}
             >
-              👥 Students
+              Students
             </button>
           )}
           {selectedExam && (
@@ -361,13 +362,13 @@ export default function MentorDashboard() {
               className={`nav-item sub ${activeTab === "examDetail" ? "active" : ""}`}
               onClick={() => setActiveTab("examDetail")}
             >
-              📊 Exam Detail
+              Exam Configuration
             </button>
           )}
         </nav>
 
         <button className="sidebar-logout" onClick={handleLogout}>
-          ⬡ Sign Out
+          Sign Out
         </button>
       </aside>
 
@@ -381,7 +382,7 @@ export default function MentorDashboard() {
             <div className="page-header">
               <div>
                 <h1>My Courses</h1>
-                <p>Manage your courses and exams</p>
+                <p>Manage your enrolled subjects and examination modules</p>
               </div>
               <button className="action-btn" onClick={() => setShowCreateCourse(true)}>
                 + New Course
@@ -390,8 +391,7 @@ export default function MentorDashboard() {
 
             {courses.length === 0 ? (
               <div className="empty-state">
-                <span>📭</span>
-                <p>No courses yet. Create your first course!</p>
+                <p>No courses found. Create your first course to begin.</p>
               </div>
             ) : (
               <div className="course-grid">
@@ -401,7 +401,9 @@ export default function MentorDashboard() {
                     className="course-card mentor-card"
                     onClick={() => handleSelectCourse(c)}
                   >
-                    <div className="course-icon">☁️</div>
+                    <div className="course-icon" style={{ background: "var(--brand-navy)", color: "#fff", width: "48px", height: "48px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", fontWeight: "700" }}>
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
                     <h3>{c.name}</h3>
                     <p className="course-meta">Click to manage exams →</p>
                   </div>
@@ -417,13 +419,14 @@ export default function MentorDashboard() {
             <div className="page-header">
               <div>
                 <button className="back-link" onClick={() => setActiveTab("courses")}>
-                  ← Courses
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                  <span>Back to Courses</span>
                 </button>
                 <h1>{selectedCourse.name}</h1>
-                <p>Exams in this course</p>
+                <p>Active and drafted examinations</p>
               </div>
               <div className="exam-actions">
-                <button className="modal-cancel" onClick={openStudents}>👥 Students</button>
+                <button className="modal-cancel" onClick={openStudents}>Manage Roster</button>
                 <button className="action-btn" onClick={() => setShowCreateExam(true)}>
                   + New Exam
                 </button>
@@ -432,8 +435,7 @@ export default function MentorDashboard() {
 
             {exams.length === 0 ? (
               <div className="empty-state">
-                <span>📝</span>
-                <p>No exams yet. Create an exam and upload questions!</p>
+                <p>No exams created yet. Create an exam and upload questions to begin.</p>
               </div>
             ) : (
               <div className="exam-list">
@@ -443,13 +445,13 @@ export default function MentorDashboard() {
                       <div className="exam-title-row">
                         <h3>{exam.title}</h3>
                         {exam.is_live
-                          ? <span className="badge badge-ok">🟢 Live</span>
-                          : <span className="badge badge-muted">🔒 Draft</span>
+                          ? <span className="badge badge-ok">• Live</span>
+                          : <span className="badge badge-muted">Draft</span>
                         }
                       </div>
                       <div className="exam-meta-row">
-                        <span>📊 {exam.pick_n} / {exam.total_q} questions</span>
-                        <span>⏱ {Math.floor(exam.duration_sec / 60)} min</span>
+                        <span>{exam.pick_n} / {exam.total_q} Questions</span>
+                        <span>{Math.floor(exam.duration_sec / 60)} min duration</span>
                       </div>
                     </div>
                     <div className="exam-actions">
@@ -489,7 +491,8 @@ export default function MentorDashboard() {
             <div className="page-header">
               <div>
                 <button className="back-link" onClick={() => setActiveTab("exams")}>
-                  ← Exams
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                  <span>Exams</span>
                 </button>
                 <h1>{selectedCourse.name} — Students</h1>
                 <p>Only students you add here can see this course and take its exams</p>
@@ -498,7 +501,7 @@ export default function MentorDashboard() {
 
             <div className="detail-grid">
               <section className="detail-card">
-                <h2>➕ Add Students</h2>
+                <h2>Add Students</h2>
                 <p className="detail-hint">
                   Enter registration numbers or emails, one per line or comma-separated.
                   Students must have signed up first.
@@ -521,7 +524,7 @@ export default function MentorDashboard() {
               </section>
 
               <section className="detail-card">
-                <h2>👥 Enrolled ({students.length})</h2>
+                <h2>Enrolled Directory ({students.length})</h2>
                 {students.length === 0 ? (
                   <p className="detail-hint">No students added yet.</p>
                 ) : (
@@ -537,7 +540,7 @@ export default function MentorDashboard() {
                             Results
                           </button>
                           <button className="exam-detail-btn" onClick={() => navigate(`/mentor/live/${st.uid}`)}>
-                            🔴 Live
+                            • Live Monitor
                           </button>
                           <button className="modal-cancel" onClick={() => handleRemoveStudent(st)}>
                             Remove
@@ -558,14 +561,15 @@ export default function MentorDashboard() {
             <div className="page-header">
               <div>
                 <button className="back-link" onClick={() => setActiveTab("exams")}>
-                  ← Exams
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                  <span>Exams</span>
                 </button>
                 <h1>{selectedExam.title}</h1>
                 <p>
                   {selectedExam.pick_n} questions · {Math.floor(selectedExam.duration_sec / 60)} min ·{" "}
                   {selectedExam.is_live
-                    ? <span style={{ color: "var(--ok)" }}>🟢 Live</span>
-                    : <span style={{ color: "var(--text-muted)" }}>🔒 Draft</span>
+                    ? <span style={{ color: "var(--ok)", fontWeight: "600" }}>• Live</span>
+                    : <span style={{ color: "var(--text-muted)", fontWeight: "600" }}>Draft</span>
                   }
                 </p>
               </div>
@@ -580,7 +584,7 @@ export default function MentorDashboard() {
             <div className="detail-grid">
               {/* Upload Questions */}
               <section className="detail-card">
-                <h2>📤 Upload Question Bank</h2>
+                <h2>Upload Question Bank</h2>
                 <p className="detail-hint">
                   Excel format: Question | Option A | B | C | D | Correct (A/B/C/D) | Topic
                 </p>
@@ -592,7 +596,7 @@ export default function MentorDashboard() {
                     onChange={handleFileChange}
                     style={{ display: "none" }}
                   />
-                  <span className="upload-icon">📎</span>
+                  <svg className="upload-icon" style={{ width: 48, height: 48, color: "var(--brand-navy)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                   <span>{uploadFile ? uploadFile.name : "Click to choose Excel file"}</span>
                 </label>
 
@@ -639,15 +643,15 @@ export default function MentorDashboard() {
                 )}
 
                 {uploadMsg && (
-                  <div className={`alert ${uploadMsg.startsWith("✅") ? "success" : "error"}`}>
-                    {uploadMsg}
+                  <div className={`alert ${uploadMsg.startsWith("✅") || uploadMsg.toLowerCase().includes("successfully") ? "success" : "error"}`}>
+                    {uploadMsg.replace("✅ ", "")}
                   </div>
                 )}
               </section>
 
               {/* Question Bank */}
               <section className="detail-card">
-                <h2>📚 Question Bank ({questions.length})</h2>
+                <h2>Question Bank ({questions.length})</h2>
                 {questions.length === 0 ? (
                   <p className="detail-hint">No questions uploaded yet.</p>
                 ) : (
@@ -670,7 +674,7 @@ export default function MentorDashboard() {
               {/* Behaviour review queue */}
               <section className="detail-card full-width">
                 <h2>
-                  🚩 Behaviour Review
+                  Behaviour Review Queue
                   {reviews.some(r => r.review_status === "PENDING_REVIEW") && (
                     <span className="badge badge-warn" style={{ marginLeft: 10 }}>
                       {reviews.filter(r => r.review_status === "PENDING_REVIEW").length} pending
@@ -680,8 +684,7 @@ export default function MentorDashboard() {
                 <p className="detail-hint">
                   Students whose integrity score reached 0 need your manual review. A score of 0 is a flag, not a verdict.
                 </p>
-                {reviewsError && <div className="alert error">{reviewsError}</div>}
-                {!reviewsError && reviews.length === 0 && (
+                {reviews.length === 0 && (
                   <p className="detail-hint">No behaviour warnings recorded for this exam.</p>
                 )}
                 {reviews.length > 0 && (
@@ -706,7 +709,7 @@ export default function MentorDashboard() {
 
               {/* Leaderboard */}
               <section className="detail-card full-width">
-                <h2>🏆 Leaderboard ({leaderboard.length} submissions)</h2>
+                <h2>Leaderboard ({leaderboard.length} submissions)</h2>
                 {leaderboard.length === 0 ? (
                   <p className="detail-hint">No submissions yet.</p>
                 ) : (
@@ -724,14 +727,16 @@ export default function MentorDashboard() {
                       {leaderboard.map(r => (
                         <tr key={r.id} className={r.rank <= 3 ? "top-rank" : ""}>
                           <td>
-                            {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `#${r.rank}`}
+                            {r.rank === 1 ? "1st" : r.rank === 2 ? "2nd" : r.rank === 3 ? "3rd" : `#${r.rank}`}
                           </td>
                           <td>{names[r.student_uid]?.name || r.student_uid}</td>
                           <td>{r.score} / {r.total}</td>
                           <td>
-                            <div className="score-bar-wrap">
-                              <div className="score-bar-fill" style={{ width: `${r.percentage}%` }} />
-                              <span>{r.percentage}%</span>
+                            <div className="score-container">
+                              <div className="score-bar-wrap">
+                                <div className="score-bar-fill" style={{ width: `${r.percentage}%` }} />
+                              </div>
+                              <span className="score-text">{r.percentage}%</span>
                             </div>
                           </td>
                           <td className="ts-cell">

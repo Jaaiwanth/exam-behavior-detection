@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import MonitoringStatus from "../components/MonitoringStatus.jsx";
 import { openSocket, sendJSON } from "../api/websocket.js";
 import { auth } from "../firebase";
+import { GraduationCap } from "lucide-react";
 
 export default function FacultyDashboard({ studentId = "s001" }) {
   const [analysis, setAnalysis]     = useState(null);
@@ -84,7 +85,7 @@ export default function FacultyDashboard({ studentId = "s001" }) {
         display: "flex", alignItems: "center", justifyContent: "space-between"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "1rem", fontWeight: 700 }}>🎓 Faculty Dashboard</span>
+          <span style={{ fontSize: "1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}><GraduationCap size={20} color="#0ea5e9" /> Faculty Dashboard</span>
           <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", padding: "3px 8px", background: "var(--bg-surface)", borderRadius: "4px" }}>
             Watching: {studentId}
           </span>

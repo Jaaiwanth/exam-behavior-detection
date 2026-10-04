@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { Briefcase, ArrowLeft } from "lucide-react";
 
 export default function MentorAuth() {
   const navigate = useNavigate();
@@ -113,77 +114,89 @@ export default function MentorAuth() {
 
   return (
     <div className="auth-root">
-      <div className="auth-bg" />
-      <div className="auth-card">
-        <button className="back-btn" onClick={() => navigate("/")}>← Back</button>
+      <div className="auth-panel-left">
+        <div className="auth-card">
+          <button className="back-btn" onClick={() => navigate("/")}>
+            <ArrowLeft size={16} />
+            <span>Back to Portal Selection</span>
+          </button>
 
-        <div className="auth-header">
-          <span className="auth-icon">👩‍🏫</span>
-          <h2>{mode === "login" ? "Mentor Login" : "Mentor Sign Up"}</h2>
-          <p>
-            {mode === "login"
-              ? "Sign in to your mentor account"
-              : "Request access — approval required"}
-          </p>
-        </div>
+          <div className="auth-header">
+            <h2>{mode === "login" ? "Faculty Login" : "Faculty Sign Up"}</h2>
+            <p>
+              {mode === "login"
+                ? "Sign in to your faculty console"
+                : "Request access — administrator approval required"}
+            </p>
+          </div>
 
-        {error   && <div className="alert error">{error}</div>}
-        {success && <div className="alert success">{success}</div>}
+          {error   && <div className="alert error">{error}</div>}
+          {success && <div className="alert success">{success}</div>}
 
-        <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
-          {mode === "signup" && (
+          <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
+            {mode === "signup" && (
+              <div className="field">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dr. Priya R"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="field">
-              <label>Full Name</label>
+              <label>Institutional Email</label>
               <input
-                type="text"
-                placeholder="e.g. Dr. Priya R"
-                value={name}
-                onChange={e => setName(e.target.value)}
+                type="email"
+                placeholder="faculty@college.edu"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
               />
             </div>
-          )}
 
-          <div className="field">
-            <label>Email Address</label>
-            <input
-              type="email"
-              placeholder="mentor@college.edu"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div className="field">
-            <label>Password</label>
-            <input
-              type="password"
-              placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
-          </div>
-
-          {mode === "signup" && (
-            <div className="signup-note">
-              📋 Your request will be reviewed by the admin before you can access the platform.
+            <div className="field">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
             </div>
-          )}
 
-          <button type="submit" className="submit-btn mentor-btn" disabled={loading}>
-            {loading
-              ? "Please wait..."
-              : mode === "login"
-              ? "Sign In"
-              : "Request Access"}
-          </button>
-        </form>
+            {mode === "signup" && (
+              <div className="signup-note">
+                📋 Your request will be reviewed by the system administrator before you can access the platform.
+              </div>
+            )}
 
-        <div className="auth-switch">
-          {mode === "login" ? (
-            <>New mentor? <button onClick={() => { setMode("signup"); clearMessages(); }}>Request access</button></>
-          ) : (
-            <>Already approved? <button onClick={() => { setMode("login"); clearMessages(); }}>Log in</button></>
-          )}
+            <button type="submit" className="submit-btn" disabled={loading}>
+              {loading
+                ? "Please wait..."
+                : mode === "login"
+                ? "Sign In"
+                : "Request Access"}
+            </button>
+          </form>
+
+          <div className="auth-switch">
+            {mode === "login" ? (
+              <>New faculty member? <button onClick={() => { setMode("signup"); clearMessages(); }}>Request access</button></>
+            ) : (
+              <>Already approved? <button onClick={() => { setMode("login"); clearMessages(); }}>Log in</button></>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="auth-panel-right">
+        <div className="brand-content">
+          <div className="brand-logo">
+            <span className="logo-icon"><Briefcase size={48} color="#0ea5e9" /></span>
+            <h1 className="logo-title">Faculty Console</h1>
+          </div>
+          <p className="brand-tagline">Manage curriculum, create and monitor active exams, and review comprehensive student behavior analytics.</p>
         </div>
       </div>
     </div>

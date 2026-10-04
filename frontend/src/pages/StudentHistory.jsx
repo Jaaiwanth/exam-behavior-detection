@@ -25,7 +25,8 @@ export default function StudentHistory() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate("/student/dashboard")}>
-            ← Dashboard
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>Dashboard</span>
           </button>
           <h1>Exam History</h1>
           <p>Your past exam results</p>

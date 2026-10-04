@@ -13,6 +13,7 @@ import {
 import useProctoring from "../hooks/useProctoring.js";
 import QuizQuestion from "../components/QuizQuestion.jsx";
 import Timer from "../components/Timer.jsx";
+import { GraduationCap, FileText, CheckCircle, AlertTriangle, Camera as CameraIcon } from "lucide-react";
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -164,7 +165,7 @@ export default function ExamRoom() {
     return (
       <div className="room-center">
         <div className="card room-card">
-          <div className="room-emoji">🚫</div>
+          <div className="room-emoji"><AlertTriangle size={64} color="#ef4444" strokeWidth={1.5} /></div>
           <h1>Cannot start exam</h1>
           <p>{blockMsg}</p>
           <button className="btn btn-primary" onClick={() => navigate("/student/dashboard")}>
@@ -179,15 +180,17 @@ export default function ExamRoom() {
     return (
       <div className="room-center">
         <div className="card room-card">
-          <div className="room-emoji">✅</div>
+          <div className="room-emoji"><CheckCircle size={64} color="#10b981" strokeWidth={1.5} /></div>
           <h1>Exam Submitted</h1>
           <p>Your answers have been recorded.</p>
-          <button className="btn btn-primary" onClick={() => navigate(`/results/${examId}`)}>
-            View Results
-          </button>
-          <button className="back-link" onClick={() => navigate("/student/dashboard")}>
-            Back to Dashboard
-          </button>
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+            <button className="btn btn-primary" onClick={() => navigate(`/results/${examId}`)}>
+              View Results
+            </button>
+            <button className="btn btn-ghost" onClick={() => navigate("/student/dashboard")}>
+              Back to Dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -198,7 +201,7 @@ export default function ExamRoom() {
     return (
       <div className="room-center">
         <div className="card room-card">
-          <div className="room-emoji">🎓</div>
+          <div className="room-emoji"><GraduationCap size={56} color="#0ea5e9" strokeWidth={1.5} /></div>
           <h1>{exam.title}</h1>
           <p>This exam is proctored. Make sure your face is clearly visible in a well-lit room.</p>
 
@@ -230,7 +233,7 @@ export default function ExamRoom() {
               onClick={proctor.requestCamera}
               disabled={camera === "requesting"}
             >
-              {camera === "requesting" ? "Waiting for permission..." : "📷 Enable Camera"}
+              {camera === "requesting" ? "Waiting for permission..." : <><CameraIcon size={20} style={{marginRight: "8px"}} /> Enable Camera</>}
             </button>
           )}
           {cameraReady && (
@@ -266,7 +269,7 @@ export default function ExamRoom() {
   return (
     <div className="room-root">
       <header className="room-header">
-        <span className="room-title">📝 {exam.title}</span>
+        <span className="room-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}><FileText size={20} /> {exam.title}</span>
         <div className="room-header-right">
           {/* Connection state only — never the score or any warning */}
           <span className={`badge ${monitor === "live" ? "badge-ok" : "badge-warn"}`}>
@@ -300,36 +303,36 @@ export default function ExamRoom() {
             submitted={submitting}
           />
 
-          <div className="room-nav">
-            <button className="btn btn-ghost" onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}>
+          <div className="room-footer">
+            <button className="nav-btn" onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}>
               ← Previous
             </button>
-            <div className="room-dots">
+            <div className="q-dots">
               {questions.map((qq, i) => (
                 <button
                   key={qq.id}
                   onClick={() => setQIndex(i)}
-                  className={`room-dot ${i === qIndex ? "current" : ""} ${answers[qq.id] ? "answered" : ""}`}
+                  className={`q-dot ${i === qIndex ? "active" : ""} ${answers[qq.id] ? "answered" : ""}`}
                 >
                   {i + 1}
                 </button>
               ))}
             </div>
             {qIndex < questions.length - 1 ? (
-              <button className="btn btn-primary" onClick={() => setQIndex(i => i + 1)}>Next →</button>
+              <button className="nav-btn" onClick={() => setQIndex(i => i + 1)}>Next →</button>
             ) : (
-              <button className="btn btn-primary" onClick={() => setConfirmOpen(true)}>Submit ✓</button>
+              <button className="nav-btn" onClick={() => setConfirmOpen(true)}>Submit ✓</button>
             )}
           </div>
         </div>
 
         <aside className="room-side">
-          <div className="card room-cam">
+          <div className="camera-box">
             <CameraPreview stream={stream} />
           </div>
-          <div className="card room-progress">
-            <p>{answeredCount} / {questions.length} answered</p>
-            <button className="btn btn-primary" onClick={() => setConfirmOpen(true)} disabled={submitting}>
+          <div className="exam-progress-card">
+            <p className="answered-text">{answeredCount} / {questions.length} answered</p>
+            <button className="btn btn-primary submit-exam-btn" onClick={() => setConfirmOpen(true)} disabled={submitting}>
               Submit Exam
             </button>
           </div>

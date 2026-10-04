@@ -43,7 +43,10 @@ export default function Results() {
     <div className="dashboard-main fade-in results-page">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate("/student/dashboard")}>← Dashboard</button>
+          <button className="back-link" onClick={() => navigate("/student/dashboard")}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>Dashboard</span>
+          </button>
           <h1>{result.exam_title}</h1>
           <p>
             Submitted{" "}

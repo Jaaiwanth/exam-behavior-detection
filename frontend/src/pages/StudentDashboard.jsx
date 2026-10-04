@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { GraduationCap } from "lucide-react";
 import { auth, db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -62,7 +63,7 @@ export default function StudentDashboard() {
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-icon">🎓</span>
+          <span className="brand-icon"><GraduationCap size={32} color="#0ea5e9" /></span>
           <span className="brand-name">ExamProctor</span>
         </div>
 
@@ -81,18 +82,18 @@ export default function StudentDashboard() {
             className={`nav-item ${activeTab === "courses" ? "active" : ""}`}
             onClick={() => setActiveTab("courses")}
           >
-            📚 Courses
+            Courses
           </button>
           <button
             className={`nav-item ${activeTab === "history" ? "active" : ""}`}
             onClick={() => navigate("/student/history")}
           >
-            📋 Exam History
+            Exam History
           </button>
         </nav>
 
         <button className="sidebar-logout" onClick={handleLogout}>
-          ⬡ Sign Out
+          Sign Out
         </button>
       </aside>
 
@@ -114,7 +115,9 @@ export default function StudentDashboard() {
                 <div className="course-grid">
                   {enrolledCourses.map(c => (
                     <div key={c.id} className="course-card enrolled" onClick={() => openCourse(c)}>
-                      <div className="course-icon">☁️</div>
+                      <div className="course-icon" style={{ background: "var(--brand-navy)", color: "#fff", width: "48px", height: "48px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", fontWeight: "700" }}>
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
                       <h3>{c.name}</h3>
                       <p className="course-meta">Enrolled</p>
                       <button className="course-btn">View Exams →</button>
@@ -126,7 +129,6 @@ export default function StudentDashboard() {
 
             {enrolledCourses.length === 0 && (
               <div className="empty-state">
-                <span>📭</span>
                 <p>You have not been added to any course yet. Ask your mentor to add you.</p>
               </div>
             )}
@@ -138,7 +140,8 @@ export default function StudentDashboard() {
           <div className="fade-in">
             <div className="page-header">
               <button className="back-link" onClick={() => setActiveTab("courses")}>
-                ← Back to Courses
+                <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                <span>Back to Courses</span>
               </button>
               <h1>{selectedCourse.name}</h1>
               <p>Available exams in this course</p>
@@ -146,7 +149,6 @@ export default function StudentDashboard() {
 
             {exams.length === 0 ? (
               <div className="empty-state">
-                <span>📝</span>
                 <p>No exams published yet. Check back later!</p>
               </div>
             ) : (
@@ -157,13 +159,13 @@ export default function StudentDashboard() {
                       <div className="exam-title-row">
                         <h3>{exam.title}</h3>
                         {exam.is_live
-                          ? <span className="badge badge-ok">🟢 Live</span>
-                          : <span className="badge badge-muted">🔒 Closed</span>
+                          ? <span className="badge badge-ok">• Live</span>
+                          : <span className="badge badge-muted">Closed</span>
                         }
                       </div>
                       <div className="exam-meta-row">
-                        <span>📊 {exam.pick_n} Questions</span>
-                        <span>⏱ {Math.floor(exam.duration_sec / 60)} minutes</span>
+                        <span>{exam.pick_n} Questions</span>
+                        <span>{Math.floor(exam.duration_sec / 60)} min duration</span>
                       </div>
                     </div>
                     <button
