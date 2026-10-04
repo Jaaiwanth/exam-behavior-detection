@@ -1,182 +1,162 @@
-# Exam Behavior Detection
+# ExamProctor
 
-An AI-based exam monitoring system that recognises **observable student behaviours** from short webcam videos using computer vision and deep learning.
+An AI-proctored online examination platform. Students take timed MCQ exams in the browser while a
+real-time computer-vision pipeline watches the webcam feed. Suspicious behaviour is **flagged, never
+auto-punished**: a mentor reviews the recorded warning clips and makes the final decision.
 
-> **Disclaimer:** This system is a research prototype. It identifies observable behaviours for human review — it does **not** automatically classify anyone as "cheating".
+> **Design rule:** an integrity score of 0 means *"needs manual review"*, not *"cheating"*. The system
+> never fails, penalises or auto-submits a student. Only a mentor's decision (Cleared / Confirmed
+> Violation) is final.
 
----
-
-## Project Goal
-
-Build an end-to-end pipeline that:
-
-1. Reads short exam-monitoring videos.
-2. Extracts MediaPipe face, hand, and pose landmarks.
-3. Engineers meaningful temporal features.
-4. Trains an LSTM model to classify observable behaviours.
-5. Feeds predictions into an evidence engine that flags suspicious patterns for a human reviewer.
-
----
-
-## Observable Behaviours
-
-| Category   | Behaviour            |
-|------------|----------------------|
-| Normal     | looking\_at\_screen  |
-| Normal     | looking\_down        |
-| Movement   | eye\_rubbing         |
-| Movement   | adjusting\_glasses   |
-| Movement   | drinking\_water      |
-| Movement   | scratching\_face     |
-| Movement   | yawning              |
-| Suspicious | looking\_behind      |
-| Suspicious | prolonged\_away      |
-| Suspicious | repeated\_left       |
-| Suspicious | repeated\_right      |
-
----
-
-## System Architecture
+## How it works
 
 ```
-Video
-  ↓
-OpenCV (video_reader.py)
-  ↓
-MediaPipe — Face + Hands + Pose (mediapipe_processor.py)
-  ↓
-Feature extraction (feature_extractor.py)
-  ↓
-Temporal sequences (temporal_features.py)
-  ↓
-LSTM behaviour classifier (train_lstm.py)
-  ↓
-Observable behaviour label
-  ↓
-Evidence / suspicious-activity engine
-  ↓
-Optional YOLO object detection
-  ↓
-Monitoring dashboard
+Student browser (React)                    FastAPI backend (Python 3.11)               AWS
+┌────────────────────────┐   WebSocket     ┌────────────────────────────┐
+│ ExamRoom + camera hook │ ── frames ────► │ student_ws                 │
+│  (1 stream, ~2 FPS)    │ ◄─ calibration ─│  └─ ExamMonitor (real ML)  │──► DynamoDB  exam_events
+└────────────────────────┘                 │      MediaPipe · dlib ·    │──► S3 (private) warning clips
+                                           │      YOLOv8n               │
+Mentor browser (React)      REST + token   │ review API                 │
+┌────────────────────────┐ ◄────────────►  │  events · recording URL ·  │──► presigned URL (5 min)
+│ Behaviour review       │                 │  review decision           │
+└────────────────────────┘                 └────────────────────────────┘
+        Firebase Auth + Firestore  (users, courses, exams, questions, results)
 ```
 
----
+1. A warning is raised by the real-time monitor (head turned away, face not visible, a different
+   person, a phone / laptop / extra person / book in frame).
+2. The backend writes an event to **DynamoDB** and encodes a short MP4 clip (6 s before + 4 s after)
+   to a **private S3** bucket.
+3. When the score reaches 0 the student's exam session becomes **Pending Review**. The student
+   can keep working.
+4. The mentor opens the behaviour log, plays a clip through a **short-lived presigned URL**, and
+   records Cleared or Confirmed Violation (with notes, reviewer and time).
 
-## Project Structure
+The student browser never sees the score, the warnings, S3 keys or recording URLs.
+
+## Roles
+
+| Role | Can do |
+|------|--------|
+| **Student** | Take exams for courses a mentor added them to; view results and history |
+| **Mentor** | Create courses and exams, upload question banks (Excel), manage students, view results, leaderboard, review flagged sessions and recordings, watch a live feed |
+| **Admin** | Approve or reject mentor sign-ups |
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite, React Router |
+| Auth / app data | Firebase Authentication + Firestore |
+| Backend | FastAPI, WebSockets (Python 3.11) |
+| Monitoring | MediaPipe (face / pose / hands), dlib (face identity), YOLOv8n (objects) |
+| Events | AWS DynamoDB (`exam_events`) |
+| Recordings | AWS S3, private bucket + presigned URLs |
+
+## Repository layout
 
 ```
-student_behavior/
-│
-├── dataset/
-│   ├── README.md               ← dataset instructions
-│   └── movements/
-│       ├── adjusting_glasses/
-│       ├── drinking_water/
-│       ├── eye_rubbing/
-│       ├── scratching_face/
-│       ├── yawning/
-│       ├── normal/
-│       │   ├── looking_at_screen/
-│       │   └── looking_down/
-│       └── suspicious/
-│           ├── looking_behind/
-│           ├── prolonged_away/
-│           ├── repeated_left/
-│           └── repeated_right/
-│
-├── src/
-│   ├── video_reader.py         ← Phase 1
-│   ├── mediapipe_processor.py  ← Phase 2
-│   ├── feature_extractor.py    ← Phase 3
-│   ├── temporal_features.py    ← Phase 4
-│   ├── build_dataset.py        ← Phase 4
-│   ├── visualize_landmarks.py  ← Phase 2
-│   └── train_lstm.py           ← Phase 5
-│
-├── outputs/
-│   ├── frame_features/
-│   ├── sequences/
-│   └── visualizations/
-│
-├── models/
-│
-├── collect_data.py             ← webcam data collection utility
-├── README.md
-├── implementation.md
-├── requirements.txt
-└── .gitignore
+backend/        FastAPI app: WebSocket monitoring, review API, Firebase token auth,
+                DynamoDB / S3 helpers, clip recorder
+  tests/        unit tests (moto) and the real-browser e2e script
+frontend/       React app (exam room, dashboards, results, mentor review)
+infra/          DynamoDB table setup, EC2 IAM policy, AWS connectivity + e2e checks
+src/            ML detectors used by the backend (mediapipe_processor, face_verifier, object_detector)
+models/         MediaPipe .task files (downloaded by setup_models.py, not committed)
+setup_models.py downloads the MediaPipe model files
+firestore.rules Firestore security rules (draft — review before deploying)
+requirements.txt        runtime dependencies (local + server)
+requirements-dev.txt    tests and development tools
+PLATFORM_IMPLEMENTATION.md   design, data model, API and protocol reference
+PROGRESS_REPORT.md           build / verification log
 ```
-
----
-
-## Development Phases
-
-| Phase | Description                          | Status      |
-|-------|--------------------------------------|-------------|
-| 0     | Project setup                        | ✅ Complete |
-| 1     | Video ingestion (OpenCV)             | ⬜ Pending  |
-| 2     | MediaPipe landmark extraction        | ⬜ Pending  |
-| 3     | Feature engineering                  | ⬜ Pending  |
-| 4     | Temporal sequence generation         | ⬜ Pending  |
-| 5     | LSTM baseline                        | ⬜ Pending  |
-| 6     | Model evaluation                     | ⬜ Pending  |
-| 7     | YOLO object detection integration    | ⬜ Pending  |
-| 8     | Evidence engine                      | ⬜ Pending  |
-| 9     | API / dashboard                      | ⬜ Pending  |
-
----
 
 ## Setup
 
-### 1. Clone the repository
+### Prerequisites
+Python **3.11** (not 3.12+, MediaPipe constraint), Node.js 18+, a Firebase project, an AWS account
+(`ap-south-1` by default).
 
+### 1. Backend
 ```bash
-git clone https://github.com/Jaaiwanth/exam-behavior-detection.git
-cd exam-behavior-detection
+py -3.11 -m pip install -r requirements.txt
+py -3.11 setup_models.py            # downloads the MediaPipe .task files into models/
+```
+YOLOv8n weights (`yolov8n.pt`) are downloaded automatically by Ultralytics on first run, into the
+folder you start the backend from — **start it from the repository root**.
+
+### 2. AWS resources
+```bash
+py -3.11 infra/dynamo_setup.py      # creates the exam_events table (PAY_PER_REQUEST)
+```
+Create a **private** S3 bucket named `jaaiwanth-exam-monitor-recordings` (or set `RECORDING_BUCKET`)
+with Block Public Access and default encryption enabled:
+```bash
+aws s3api create-bucket --bucket <name> --region ap-south-1 \
+    --create-bucket-configuration LocationConstraint=ap-south-1
+aws s3api put-public-access-block --bucket <name> --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-encryption --bucket <name> --server-side-encryption-configuration \
+    '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+```
+`infra/ec2_iam_policy.json` is the least-privilege policy for the server's IAM role.
+`py -3.11 infra/test_aws.py` verifies DynamoDB and S3 access.
+
+### 3. Firebase
+Enable **Email/Password** auth and create a Firestore database. The web config lives in
+`frontend/src/firebase.js`. Draft security rules are in `firestore.rules` (publish them from the
+Firebase console and re-test every flow; test mode expires).
+
+**First admin:** sign up through the Mentor form, then in Firestore set `users/{uid}.role` to
+`"admin"`. Approve other mentors at `/admin`.
+
+### 4. Frontend
+```bash
+cd frontend
+npm install
+```
+Create `frontend/.env` (gitignored):
+```
+VITE_API_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8000
 ```
 
-### 2. Create and activate a virtual environment
+## Run
 
 ```bash
-python -m venv .venv
+# Terminal 1 — backend (from the repository root)
+py -3.11 -m uvicorn backend.main:app --port 8000
 
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
+# Terminal 2 — frontend
+cd frontend && npm run dev          # http://localhost:5173
 ```
 
-### 3. Install dependencies
+### Backend environment variables
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AWS_REGION` | `ap-south-1` | AWS region |
+| `DYNAMO_TABLE` | `exam_events` | DynamoDB table |
+| `RECORDING_BUCKET` | `jaaiwanth-exam-monitor-recordings` | S3 bucket for warning clips |
+| `PRESIGN_EXPIRES_SEC` | `300` | Lifetime of recording URLs |
+| `FIREBASE_PROJECT_ID` | `exam-proctor-31750` | Used to verify Firebase ID tokens |
+| `WS_AUTH` | `1` | `0` skips WebSocket token checks — **local test harness only, never in production** |
+
+## Tests
 
 ```bash
-pip install -r requirements.txt
+py -3.11 -m pip install -r requirements-dev.txt
+py -3.11 -m pytest backend/tests -q          # 8 tests, in-memory AWS (moto)
+cd frontend && npm run build && npm run lint
 ```
+`backend/tests/e2e_browser_proctor.py` is a real-browser, real-ML, real-AWS end-to-end run
+(headless Chromium with a fake webcam). It is not part of the pytest suite; see the script header.
+`infra/test_review_e2e_aws.py` checks the review pipeline against real AWS.
 
-### 4. Add your dataset
-
-See [`dataset/README.md`](dataset/README.md) for the expected folder structure and video format.
-
----
-
-## Dataset Notice
-
-The real video dataset is **not included** in this repository.  
-See [`dataset/README.md`](dataset/README.md) for instructions on preparing your own data.
-
-Only use video data that you have permission to record and process.
-
----
-
-## Important Limitations
-
-- The current prototype dataset is extremely small (sometimes only one video per class).
-- Accuracy figures from a tiny dataset **cannot** be used to claim reliable real-world detection.
-- The system does **not** label anyone as a cheater — it reports observable behaviours for human review.
-- For production use the dataset must be significantly expanded.
-
----
-
-## License
-
-This project is for research and educational purposes only.
+## Security notes
+- Students and mentors authenticate with Firebase. The backend verifies the Firebase ID token on every
+  review API call and on both WebSockets; mentors can only access exams they created.
+- Recordings are private. The browser only ever receives a presigned URL that expires in minutes.
+- Students cannot send `reset` / `recalibrate`; those are staff-only actions.
+- Known limits: grading runs in the browser and question banks (with correct answers) are readable by
+  signed-in users; Firestore rules are a draft. See `PLATFORM_IMPLEMENTATION.md` and `PROGRESS_REPORT.md`.

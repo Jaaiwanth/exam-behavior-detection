@@ -128,8 +128,8 @@ To use: Firebase Console → Firestore → Rules → paste → Publish, then re-
 - Mentors cannot yet bulk-import students from Excel.
 - Student login looks the account up by the email field (the `reg_map` collection is never written), so the registration number is not actually checked.
 - S3 CORS for presigned clip URLs: not started.
-- `implementation.md` (ML pipeline status) is out of date — it still says Phase 3 is current.
-- Pre-existing lint warnings in `StudentExam.jsx` (old prototype page, no longer routed) and `useEffect` dependency warnings in the dashboards.
+- The old LSTM/research pipeline (`implementation.md`, training scripts, dataset tooling) was removed from the repository; the project is the ExamProctor platform only.
+- `useEffect` dependency lint warnings in the dashboards.
 
 ---
 
@@ -142,7 +142,7 @@ Added after the first version of this report. Full description in `PLATFORM_IMPL
 - The events API is now authenticated (Firebase ID token), mentor/admin only, and mentors can only see exams they created. This closes the "no authentication on /api/events" item in §9.
 - Verified by `backend/tests/test_review_pipeline.py` against moto (3 tests pass). **Not** verified against real AWS or a real browser.
 - **DynamoDB schema:** the logger now matches `infra/dynamo_setup.py` (PK `exam_id`). If your existing `exam_events` table was created with a different key (e.g. PK `student_id`), it must be recreated.
-- New backend deps: `google-auth`, `requests`, `imageio-ffmpeg` (`backend/requirements_web.txt`); tests: `backend/requirements_test.txt`.
+- New backend deps: `google-auth`, `requests`, `imageio-ffmpeg` (now in `requirements.txt`); test tools: `requirements-dev.txt`.
 - The `/ws/faculty/{student_id}` live feed is still unauthenticated.
 
 ## 9c. Update — Student browser/webcam integration

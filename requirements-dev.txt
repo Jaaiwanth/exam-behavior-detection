@@ -1,0 +1,17 @@
+# requirements-dev.txt — tests and development tools
+# ===================================================
+#   py -3.11 -m pip install -r requirements-dev.txt
+#
+# Unit tests (no real AWS, no browser):
+#   py -3.11 -m pytest backend/tests -q
+#
+# Real-browser end-to-end test (needs real AWS credentials):
+#   py -3.11 -m playwright install chromium
+#   py -3.11 backend/tests/e2e_browser_proctor.py <fake-webcam.mjpeg>
+
+-r requirements.txt
+
+pytest>=8.0
+moto[dynamodb,s3]>=5.0          # in-memory DynamoDB + S3 for the unit tests
+httpx>=0.27                     # FastAPI TestClient
+playwright>=1.40                # browser e2e test only

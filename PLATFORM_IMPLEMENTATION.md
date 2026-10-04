@@ -2,7 +2,7 @@
 
 > This document tracks the design, architecture, and build status of the
 > full-stack exam web platform that wraps the AI behaviour-monitoring backend.
-> The ML pipeline is documented separately in `implementation.md`.
+> The real-time ML monitoring (`backend/monitor_session.py`, `src/`) is described in sections 12 and 13.
 
 ---
 

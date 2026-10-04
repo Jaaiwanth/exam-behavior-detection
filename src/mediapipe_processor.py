@@ -8,9 +8,6 @@ PoseLandmarker) to extract landmarks from video frames.
 Before using this module, download the required model files:
     py -3.11 setup_models.py
 
-Then run scripts with Python 3.11 (mediapipe 1.0+ does not support 3.14):
-    py -3.11 src/mediapipe_processor.py --video <path>
-
 Responsibilities:
     - Extract face mesh landmarks (478 points) including eyes, nose, mouth.
     - Estimate approximate head pose (yaw, pitch, roll) from face geometry.
@@ -25,23 +22,10 @@ Public API:
     FaceResult          — face mesh + head pose + key points
     HandResult          — single-hand landmarks + key points
     PoseResult          — upper-body pose landmarks
-
-Usage:
-    from src.mediapipe_processor import LandmarkProcessor
-    from src.video_reader import read_frames
-
-    with LandmarkProcessor() as proc:
-        for idx, frame in read_frames("dataset/.../video.mp4"):
-            result = proc.process_frame(frame, frame_index=idx)
-            print(result.face.yaw, result.face.pitch)
-
-Standalone:
-    py -3.11 src/mediapipe_processor.py --video dataset/movements/eye_rubbing/eye_rubbing_001.mp4
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 import math
 from dataclasses import dataclass, field
@@ -448,15 +432,6 @@ class LandmarkProcessor:
         Maximum hands to detect per frame (default 2).
     min_face_confidence, min_hand_confidence, min_pose_confidence:
         Minimum detection confidence thresholds.
-
-    Example
-    -------
-    >>> from src.mediapipe_processor import LandmarkProcessor
-    >>> from src.video_reader import read_frames
-    >>> with LandmarkProcessor() as proc:
-    ...     for idx, frame in read_frames("path/to/video.mp4"):
-    ...         result = proc.process_frame(frame, frame_index=idx)
-    ...         print(result.face.yaw)
     """
 
     def __init__(
@@ -608,140 +583,3 @@ class LandmarkProcessor:
             image_width=w,
             image_height=h,
         )
-
-    # ------------------------------------------------------------------
-    # Full-video processing
-    # ------------------------------------------------------------------
-
-    def process_video(
-        self,
-        video_path: str | Path,
-        max_frames: Optional[int] = None,
-        log_interval: int = 50,
-    ) -> List[FrameLandmarks]:
-        """
-        Process every frame of a video and return a list of FrameLandmarks.
-
-        Parameters
-        ----------
-        video_path:
-            Path to the .mp4 file.
-        max_frames:
-            Stop after this many frames (useful for quick tests).
-        log_interval:
-            Log progress every N frames.
-
-        Returns
-        -------
-        List of FrameLandmarks in chronological order.
-        """
-        import sys
-        import os
-        # Ensure the project root is on sys.path when running as a standalone script
-        _project_root = str(Path(__file__).resolve().parent.parent)
-        if _project_root not in sys.path:
-            sys.path.insert(0, _project_root)
-        from src.video_reader import read_frames
-
-        video_path = Path(video_path)
-        logger.info("Processing video: %s", video_path.name)
-
-        results: List[FrameLandmarks] = []
-
-        for idx, frame in read_frames(video_path, max_frames=max_frames):
-            result = self.process_frame(frame, frame_index=idx)
-            results.append(result)
-
-            if (idx + 1) % log_interval == 0:
-                logger.debug(
-                    "Frame %4d  face=%s  L=%s  R=%s  pose=%s",
-                    idx,
-                    result.face.detected,
-                    result.left_hand.detected,
-                    result.right_hand.detected,
-                    result.pose.detected,
-                )
-
-        n = len(results)
-        if n > 0:
-            face_n = sum(r.face.detected for r in results)
-            lh_n = sum(r.left_hand.detected for r in results)
-            rh_n = sum(r.right_hand.detected for r in results)
-            pose_n = sum(r.pose.detected for r in results)
-            logger.info(
-                "%s | %d frames | face %d/%d | L-hand %d/%d | R-hand %d/%d | pose %d/%d",
-                video_path.name, n,
-                face_n, n, lh_n, n, rh_n, n, pose_n, n,
-            )
-
-        return results
-
-
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Phase 2 — MediaPipe landmark extraction: process a video and report detection rates."
-    )
-    parser.add_argument("--video", required=True, help="Path to an .mp4 video file.")
-    parser.add_argument(
-        "--max-frames", type=int, default=None,
-        help="Process only the first N frames (default: all).",
-    )
-    parser.add_argument("--verbose", action="store_true")
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = _parse_args()
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    video_path = Path(args.video)
-    if not video_path.exists():
-        logger.error("Video not found: %s", video_path)
-        raise SystemExit(1)
-
-    with LandmarkProcessor() as proc:
-        results = proc.process_video(video_path, max_frames=args.max_frames)
-
-    if not results:
-        logger.warning("No frames processed.")
-        return
-
-    print("\n--- Head Pose Sample (first 10 face-detected frames) ---")
-    print(f"{'Frame':>6}  {'Yaw':>8}  {'Pitch':>8}  {'Roll':>8}  Hands")
-    print("-" * 50)
-    shown = 0
-    for r in results:
-        if not r.face.detected:
-            continue
-        hands = []
-        if r.left_hand.detected:
-            hands.append("L")
-        if r.right_hand.detected:
-            hands.append("R")
-        print(
-            f"{r.frame_index:>6}  "
-            f"{r.face.yaw:>7.1f}°  "
-            f"{r.face.pitch:>7.1f}°  "
-            f"{r.face.roll:>7.1f}°  "
-            f"{'/'.join(hands) or '-'}"
-        )
-        shown += 1
-        if shown >= 10:
-            break
-
-    n = len(results)
-    print(f"\nDetection rates over {n} frames:")
-    print(f"  Face:       {100*sum(r.face.detected for r in results)/n:5.1f}%")
-    print(f"  Left hand:  {100*sum(r.left_hand.detected for r in results)/n:5.1f}%")
-    print(f"  Right hand: {100*sum(r.right_hand.detected for r in results)/n:5.1f}%")
-    print(f"  Pose:       {100*sum(r.pose.detected for r in results)/n:5.1f}%")
-    print()
-
-
-if __name__ == "__main__":
-    main()

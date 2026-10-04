@@ -1,15 +1,12 @@
-# src — Exam Behavior Detection Source Code
+# src — ML detectors used by the backend
 
-This package contains the processing pipeline, organised by phase:
+`backend/monitor_session.py` combines these three detectors into the real-time exam monitor.
 
-| File                      | Phase | Description                                    |
-|---------------------------|-------|------------------------------------------------|
-| `video_reader.py`         | 1     | OpenCV video ingestion and metadata collection |
-| `mediapipe_processor.py`  | 2     | MediaPipe landmark extraction                  |
-| `feature_extractor.py`    | 3     | Landmark → numerical feature engineering       |
-| `temporal_features.py`    | 4     | Sliding window sequence generation             |
-| `build_dataset.py`        | 4     | End-to-end dataset build pipeline              |
-| `visualize_landmarks.py`  | 2     | Debugging / visualisation utilities            |
-| `train_lstm.py`           | 5     | LSTM model definition and training             |
+| File | Purpose |
+|------|---------|
+| `mediapipe_processor.py` | MediaPipe face / hand / pose landmarks and head pose per frame |
+| `face_verifier.py` | Face identity check (dlib embeddings) to detect a different person |
+| `object_detector.py` | YOLOv8n detection of phones, laptops, extra people and books |
 
-Each file is implemented and tested incrementally — see `implementation.md` for the current phase.
+Model files: MediaPipe `.task` files are downloaded into `models/` by `setup_models.py`;
+`yolov8n.pt` is downloaded automatically by Ultralytics on first use.
