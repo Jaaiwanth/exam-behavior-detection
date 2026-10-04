@@ -234,7 +234,6 @@ frontend/src/
     StudentAuth.jsx             Student signup + login                  [Done]
     MentorAuth.jsx              Mentor signup + login                   [Done]
     AdminApproval.jsx           Admin approve/reject mentors            [Done]
-    StudentExam.jsx             Exam taking page                        [Existing]
     FacultyDashboard.jsx        Live monitoring dashboard               [Existing]
     StudentDashboard.jsx        Course list, exam list                  [Done]
     MentorDashboard.jsx         Full mentor panel                       [Done]
