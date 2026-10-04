@@ -65,7 +65,7 @@ infra/          DynamoDB table setup, EC2 IAM policy, AWS connectivity + e2e che
 src/            ML detectors used by the backend (mediapipe_processor, face_verifier, object_detector)
 models/         MediaPipe .task files (downloaded by setup_models.py, not committed)
 setup_models.py downloads the MediaPipe model files
-firestore.rules Firestore security rules (draft — review before deploying)
+firestore.rules Firestore security rules (tested)   firestore-tests/ emulator tests for the rules
 requirements.txt        runtime dependencies (local + server)
 requirements-dev.txt    tests and development tools
 PLATFORM_IMPLEMENTATION.md   design, data model, API and protocol reference
@@ -105,8 +105,9 @@ aws s3api put-bucket-encryption --bucket <name> --server-side-encryption-configu
 
 ### 3. Firebase
 Enable **Email/Password** auth and create a Firestore database. The web config lives in
-`frontend/src/firebase.js`. Draft security rules are in `firestore.rules` (publish them from the
-Firebase console and re-test every flow; test mode expires).
+`frontend/src/firebase.js`. Security rules are in `firestore.rules` (tested with the Firestore emulator, see Tests). Deploy them
+with `firebase deploy --only firestore:rules` or paste them into the console, then smoke-test every role.
+Do **not** leave the database in test mode.
 
 **First admin:** sign up through the Mentor form, then in Firestore set `users/{uid}.role` to
 `"admin"`. Approve other mentors at `/admin`.
@@ -148,6 +149,9 @@ cd frontend && npm run dev          # http://localhost:5173
 py -3.11 -m pip install -r requirements-dev.txt
 py -3.11 -m pytest backend/tests -q          # 8 tests, in-memory AWS (moto)
 cd frontend && npm run build && npm run lint
+
+# Firestore security rules (needs Java 21+; downloads the emulator on first run)
+cd firestore-tests && npm install && npm test      # 65 tests
 ```
 `backend/tests/e2e_browser_proctor.py` is a real-browser, real-ML, real-AWS end-to-end run
 (headless Chromium with a fake webcam). It is not part of the pytest suite; see the script header.
@@ -159,4 +163,5 @@ cd frontend && npm run build && npm run lint
 - Recordings are private. The browser only ever receives a presigned URL that expires in minutes.
 - Students cannot send `reset` / `recalibrate`; those are staff-only actions.
 - Known limits: grading runs in the browser and question banks (with correct answers) are readable by
-  signed-in users; Firestore rules are a draft. See `PLATFORM_IMPLEMENTATION.md` and `PROGRESS_REPORT.md`.
+  signed-in users; grading is client-side, so an enrolled student can read the answer key and write their own score
+  (Firestore rules cannot hide a field from a user who may read the document). See `PLATFORM_IMPLEMENTATION.md` and `PROGRESS_REPORT.md`.

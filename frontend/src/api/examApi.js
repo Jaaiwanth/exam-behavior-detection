@@ -21,10 +21,10 @@ export async function createCourse({ name, mentorUid }) {
   return ref.id;
 }
 
-/** Get all courses */
-export async function getAllCourses() {
-  const snap = await getDocs(collection(db, "courses"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+/** Get the courses with these ids (a student reads only the courses they are enrolled in) */
+export async function getCoursesByIds(courseIds) {
+  const snaps = await Promise.all(courseIds.map(id => getDoc(doc(db, "courses", id))));
+  return snaps.filter(s => s.exists()).map(s => ({ id: s.id, ...s.data() }));
 }
 
 /** Get courses created by a specific mentor */
@@ -65,7 +65,9 @@ export async function findStudent(identifier) {
     : ["reg_no", [id, id.toUpperCase()]];
 
   for (const value of [...new Set(variants)]) {
-    const snap = await getDocs(query(collection(db, "users"), where(field, "==", value)));
+    // the role filter is required by the security rules (mentors may only read student profiles)
+    const snap = await getDocs(query(
+      collection(db, "users"), where(field, "==", value), where("role", "==", "student")));
     const hit = snap.docs.find(d => d.data().role === "student");
     if (hit) return { uid: hit.id, ...hit.data() };
   }
@@ -344,15 +346,26 @@ export async function getExamLeaderboard(examId) {
  * Everything needed to render one student's result for one exam:
  * { result, review, trend, rank, participants } or null if not submitted.
  */
-export async function getResultBundle(examId, studentUid) {
+export async function getResultBundle(examId, studentUid, courseExamIds = null) {
   const result = await getResult(examId, studentUid);
   if (!result) return null;
 
+  // Student view (no courseExamIds): the student's own history query.
+  // Mentor view: Firestore rules only let a mentor read results of exams they own, so the trend is
+  // built from the results of this course's exams instead of a query across all of the student's exams.
+  const loadHistory = async () => {
+    if (!courseExamIds) return getStudentHistory(studentUid);
+    const rows = (await Promise.all(courseExamIds.map(id => getResult(id, studentUid)))).filter(Boolean);
+    const ms = r => r.submitted_at?.toMillis?.() ?? 0;
+    return rows.sort((a, b) => ms(b) - ms(a));
+  };
+
   const [history, session, bank, board] = await Promise.all([
-    getStudentHistory(studentUid),
+    loadHistory(),
     getStudentExamSession(examId, studentUid),
     getQuestionBank(examId),
-    getExamLeaderboard(examId),
+    // the exam-wide leaderboard is mentor/admin only; for a student the rank is simply not shown
+    getExamLeaderboard(examId).catch(() => []),
   ]);
 
   const bankMap = Object.fromEntries(bank.map(q => [q.id, q]));

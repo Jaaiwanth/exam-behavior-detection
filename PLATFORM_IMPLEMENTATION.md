@@ -275,7 +275,7 @@ Already set up via AWS Console. Table name: `exam_events` in `ap-south-1`.
 - [x] Project created: `exam-proctor-31750`
 - [x] Email/Password auth enabled
 - [x] Firestore database created (test mode)
-- [ ] Firestore security rules — drafted in `firestore.rules` (repo root), not yet deployed; publish in Firebase Console > Firestore > Rules, then re-test every flow
+- [x] Firestore security rules — `firestore.rules`, tested by `firestore-tests/` (65 emulator tests). **Deploy them** (publish in the console or `firebase deploy --only firestore:rules`); the live database was found in open test mode.
 - [ ] S3 bucket CORS config for presigned URLs
 
 ---

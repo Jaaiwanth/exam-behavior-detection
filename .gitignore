@@ -93,3 +93,6 @@ build/
 # ------------------------------------------------------------
 *.pt
 *.mjpeg
+
+# Node dependencies of the rules test project
+firestore-tests/node_modules/

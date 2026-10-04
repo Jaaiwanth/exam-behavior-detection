@@ -1,101 +1,300 @@
 rules_version = '2';
 
-// ExamProctor — Firestore security rules (DRAFT: review, then deploy with
-// `firebase deploy --only firestore:rules` or paste into Firebase Console > Firestore > Rules).
+// ExamProctor — Firestore security rules
+// =======================================
+// Written against the app's ACTUAL Firestore operations (frontend/src/api/examApi.js and the pages).
+// Roles live in users/{uid}.role: "student" | "mentor" | "admin" | "pending" | "rejected".
 //
-// Roles live in users/{uid}.role: "student" | "mentor" | "pending" | "admin" | "rejected".
-// Known limits (need a backend / Cloud Functions to close fully):
-//   - student_exams and results are written by the client, so a determined student
-//     could write a false score. Rules only stop edits after submission and writes for other users.
-//   - Question banks (with correct answers) are readable by any signed-in user.
-//   - Any signed-in user can read results (the rank / leaderboard queries need this).
+// Ownership chain used throughout (these are real fields):
+//   courses.mentor_uid  ->  exams.course_id  ->  questions/{examId}/bank/*
+//   enrollments/{courseId}__{studentUid}   student_exams/{examId}__{studentUid}   results/{examId}__{studentUid}
+//
+// What rules CANNOT do for this architecture (see PROGRESS notes in the audit):
+//   - Grading is done in the browser and `correct` is stored in the question documents, so an
+//     enrolled student can read the answer key of a live exam and can write their own score.
+//     These rules only stop everyone ELSE (outsiders, other students, other mentors).
+//   - Registration numbers are self-asserted and not unique.
+//
+// Every read of a document that might not exist (get by id) is decided from the document ID, never from
+// resource.data, so a missing document gives "not found" instead of "permission denied".
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null; }
-    function uid()      { return request.auth.uid; }
-    function myRole()   { return get(/databases/$(database)/documents/users/$(uid())).data.role; }
-    function isAdmin()  { return signedIn() && myRole() == "admin"; }
-    function isMentor() { return signedIn() && (myRole() == "mentor" || myRole() == "admin"); }
-    function isStudent(){ return signedIn() && myRole() == "student"; }
+    // ── helpers ─────────────────────────────────────────────────────────────
+    function signedIn()  { return request.auth != null; }
+    function uid()       { return request.auth.uid; }
+    function userDoc(id) { return get(/databases/$(database)/documents/users/$(id)); }
+    function myRole()    { return userDoc(uid()).data.role; }
+    function isAdmin()   { return signedIn() && myRole() == "admin"; }
+    function isMentor()  { return signedIn() && myRole() == "mentor"; }
+    function isStudent() { return signedIn() && myRole() == "student"; }
 
-    // Compound ids look like "{examId}__{studentUid}" / "{courseId}__{studentUid}"
-    function idOwnedByMe(id) { return signedIn() && id.split("__")[1] == uid(); }
+    // "a__b" compound ids: index 0 = course/exam id, index 1 = student uid
+    function idPart(id, i) { return id.split("__")[i]; }
 
-    // ── users ───────────────────────────────────────────────
+    function courseDoc(courseId) { return get(/databases/$(database)/documents/courses/$(courseId)); }
+    function examDoc(examId)     { return get(/databases/$(database)/documents/exams/$(examId)); }
+
+    // admin: any course. mentor: only courses they own.
+    function ownsCourse(courseId) {
+      return isAdmin() || (isMentor() && courseDoc(courseId).data.mentor_uid == uid());
+    }
+    function ownsExam(examId) { return ownsCourse(examDoc(examId).data.course_id); }
+
+    // the signed-in user has been added to this course by its mentor
+    function enrolled(courseId) {
+      return exists(/databases/$(database)/documents/enrollments/$(courseId + "__" + uid()));
+    }
+    // current exam flow: an enrolled student may read an exam's questions while it is live,
+    // and afterwards if they already have a session (resume / result review)
+    function canTakeExam(examId) {
+      return isStudent()
+          && enrolled(examDoc(examId).data.course_id)
+          && (examDoc(examId).data.is_live == true
+              || exists(/databases/$(database)/documents/student_exams/$(examId + "__" + uid())));
+    }
+
+    // ── users ───────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read:   if signedIn() && (userId == uid() || isMentor());
-      // Self-signup may only create a student or pending-mentor profile — never mentor/admin.
+      // own profile; admin: anyone; mentor: STUDENT profiles only (needed to add students by reg no / email)
+      allow get: if signedIn()
+                 && (userId == uid()
+                     || isAdmin()
+                     || (isMentor() && resource.data.role == "student"));
+      // lookups by email / reg_no from the mentor dashboard (the query must filter role == "student")
+      allow list: if signedIn()
+                  && (isAdmin() || (isMentor() && resource.data.role == "student"));
+
+      // Self-signup only as student or pending mentor; email must be the account's own email.
       allow create: if signedIn() && userId == uid()
-                    && request.resource.data.role in ["student", "pending"];
-      // Users cannot change their own role; admin (approval page) can change anything.
-      allow update: if isAdmin()
-                    || (signedIn() && userId == uid()
-                        && request.resource.data.role == resource.data.role);
+                    && request.resource.data.keys().hasOnly(["name", "email", "reg_no", "role", "created_at"])
+                    && request.resource.data.keys().hasAll(["name", "email", "role", "created_at"])
+                    && request.resource.data.role in ["student", "pending"]
+                    && (request.resource.data.role == "pending"
+                        || (request.resource.data.keys().hasAll(["reg_no"])
+                            && request.resource.data.reg_no is string
+                            && request.resource.data.reg_no.size() > 0))
+                    && request.resource.data.name is string
+                    && request.resource.data.email is string
+                    && request.resource.data.email.lower() == request.auth.token.email.lower()
+                    && request.resource.data.created_at is string;
+
+      // A user may only rename themselves — never role, email or reg_no.
+      // Admin may only move a PENDING mentor to mentor / rejected (the Admin approval page).
+      allow update: if signedIn()
+                    && ((userId == uid()
+                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name"])
+                         && request.resource.data.name is string)
+                        || (isAdmin()
+                            && resource.data.role == "pending"
+                            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["role"])
+                            && request.resource.data.role in ["mentor", "rejected"]));
       allow delete: if false;
     }
 
-    // ── mentor approval requests ────────────────────────────
+    // ── pending mentor requests ─────────────────────────────────────────────
     match /pending_mentors/{userId} {
+      allow get:  if signedIn() && (userId == uid() || isAdmin());
+      allow list: if isAdmin();
       allow create: if signedIn() && userId == uid()
-                    && request.resource.data.status == "pending";
-      allow read:   if isAdmin() || (signedIn() && userId == uid());
-      allow update: if isAdmin();
+                    && request.resource.data.keys().hasOnly(["name", "email", "uid", "requested_at", "status"])
+                    && request.resource.data.keys().hasAll(["name", "email", "uid", "requested_at", "status"])
+                    && request.resource.data.uid == uid()
+                    && request.resource.data.status == "pending"
+                    && request.resource.data.email is string
+                    && request.resource.data.email.lower() == request.auth.token.email.lower()
+                    && myRole() == "pending";
+      allow update: if isAdmin()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
+                    && request.resource.data.status in ["approved", "rejected"];
       allow delete: if false;
     }
 
-    // Login looks up reg_no -> email BEFORE the user is signed in, so reads must be open.
-    // Single-document reads only (no listing), and no client writes.
+    // ── reg_map ─────────────────────────────────────────────────────────────
+    // The student login form looks up reg_no -> email BEFORE signing in, so this single-document read
+    // must stay public. Nothing in the app writes to this collection, so no document exists today.
     match /reg_map/{regNo} {
       allow get: if true;
       allow list, write: if false;
     }
 
-    // ── courses ─────────────────────────────────────────────
+    // ── courses ─────────────────────────────────────────────────────────────
     match /courses/{courseId} {
-      allow read:   if signedIn();
-      allow create: if isMentor() && request.resource.data.mentor_uid == uid();
-      allow update, delete: if isAdmin() || (isMentor() && resource.data.mentor_uid == uid());
+      allow get:  if signedIn()
+                  && (isAdmin()
+                      || (isMentor() && resource.data.mentor_uid == uid())
+                      || (isStudent() && enrolled(courseId)));
+      // mentor dashboard: where("mentor_uid", "==", uid). Students fetch their courses one by one (get).
+      allow list: if signedIn()
+                  && (isAdmin() || (isMentor() && resource.data.mentor_uid == uid()));
+
+      allow create: if signedIn() && (isMentor() || isAdmin())
+                    && request.resource.data.keys().hasOnly(["name", "mentor_uid", "created_at"])
+                    && request.resource.data.keys().hasAll(["name", "mentor_uid", "created_at"])
+                    && request.resource.data.mentor_uid == uid()
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.created_at == request.time;
+      allow update: if signedIn()
+                    && (isAdmin() || (isMentor() && resource.data.mentor_uid == uid()))
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name"]);
+      allow delete: if signedIn()
+                    && (isAdmin() || (isMentor() && resource.data.mentor_uid == uid()));
     }
 
-    // ── enrollments (mentor-managed) ────────────────────────
+    // ── enrollments (mentor-managed) ────────────────────────────────────────
     match /enrollments/{enrollId} {
-      allow get:    if isMentor() || idOwnedByMe(enrollId);
-      allow list:   if isMentor() || (signedIn() && resource.data.student_uid == uid());
-      allow create, update, delete: if isMentor();
+      // student: own enrollment (checked from the doc id). mentor: enrollments of courses they own.
+      allow get:  if signedIn()
+                  && ((isStudent() && idPart(enrollId, 1) == uid())
+                      || ownsCourse(idPart(enrollId, 0)));
+      // student dashboard: where("student_uid", "==", uid)   mentor: where("course_id", "==", courseId)
+      allow list: if signedIn()
+                  && ((isStudent() && resource.data.student_uid == uid())
+                      || ownsCourse(resource.data.course_id));
+
+      allow create: if signedIn() && ownsCourse(idPart(enrollId, 0))
+                    && request.resource.data.keys().hasOnly(["student_uid", "course_id", "enrolled_at"])
+                    && request.resource.data.keys().hasAll(["student_uid", "course_id", "enrolled_at"])
+                    && request.resource.data.course_id == idPart(enrollId, 0)
+                    && request.resource.data.student_uid == idPart(enrollId, 1)
+                    && userDoc(request.resource.data.student_uid).data.role == "student"
+                    && request.resource.data.enrolled_at == request.time;
+      // re-adding an already enrolled student (setDoc on an existing id) only refreshes the timestamp
+      allow update: if signedIn() && ownsCourse(idPart(enrollId, 0))
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["enrolled_at"])
+                    && request.resource.data.enrolled_at == request.time;
+      allow delete: if signedIn() && ownsCourse(idPart(enrollId, 0));
     }
 
-    // ── exams ───────────────────────────────────────────────
+    // ── exams ───────────────────────────────────────────────────────────────
     match /exams/{examId} {
-      allow read:   if signedIn();
-      allow create: if isMentor() && request.resource.data.created_by == uid();
-      allow update, delete: if isAdmin() || (isMentor() && resource.data.created_by == uid());
+      // mentor of the course / admin; students enrolled in the course (the dashboard also lists
+      // closed exams, so drafts' metadata is visible to enrolled students — questions are not).
+      allow get, list: if signedIn()
+                       && (ownsCourse(resource.data.course_id)
+                           || (isStudent() && enrolled(resource.data.course_id)));
+
+      allow create: if signedIn() && (isMentor() || isAdmin())
+                    && request.resource.data.keys().hasOnly(["course_id", "title", "pick_n", "duration_sec",
+                                                            "total_q", "is_live", "created_by", "created_at"])
+                    && request.resource.data.keys().hasAll(["course_id", "title", "pick_n", "duration_sec",
+                                                            "total_q", "is_live", "created_by", "created_at"])
+                    && request.resource.data.created_by == uid()
+                    && ownsCourse(request.resource.data.course_id)
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
+                    && request.resource.data.pick_n is number
+                    && request.resource.data.pick_n >= 1
+                    && request.resource.data.duration_sec is number
+                    && request.resource.data.duration_sec >= 60
+                    && request.resource.data.total_q == 0
+                    && request.resource.data.is_live == false
+                    && request.resource.data.created_at == request.time;
+      // the app only ever toggles is_live and updates total_q after an upload
+      allow update: if signedIn() && ownsCourse(resource.data.course_id)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["is_live", "total_q"])
+                    && request.resource.data.is_live is bool
+                    && request.resource.data.total_q is number
+                    && request.resource.data.total_q >= 0;
+      allow delete: if signedIn() && ownsCourse(resource.data.course_id);
     }
 
-    // ── question banks ──────────────────────────────────────
+    // ── question banks ──────────────────────────────────────────────────────
+    // NOTE: the `correct` field is part of these documents and the browser grades the exam, so any
+    // user allowed to read a question can read its answer. These rules decide WHO may read.
     match /questions/{examId}/bank/{questionId} {
-      allow read:  if signedIn();
-      allow write: if isMentor();
+      allow read: if signedIn() && (ownsExam(examId) || canTakeExam(examId));
+
+      allow create: if signedIn() && ownsExam(examId)
+                    && request.resource.data.keys().hasOnly(["question", "opt_a", "opt_b", "opt_c", "opt_d",
+                                                            "correct", "topic"])
+                    && request.resource.data.keys().hasAll(["question", "opt_a", "opt_b", "opt_c", "opt_d",
+                                                            "correct", "topic"])
+                    && request.resource.data.question is string
+                    && request.resource.data.opt_a is string
+                    && request.resource.data.opt_b is string
+                    && request.resource.data.opt_c is string
+                    && request.resource.data.opt_d is string
+                    && request.resource.data.topic is string
+                    && request.resource.data.correct in ["A", "B", "C", "D"];
+      allow update: if false;                         // the app replaces a bank by delete + create
+      allow delete: if signedIn() && ownsExam(examId);
     }
 
-    // ── a student's in-progress / submitted exam ────────────
+    // ── a student's exam session ────────────────────────────────────────────
     match /student_exams/{sessionId} {
-      allow get:    if isMentor() || idOwnedByMe(sessionId);
-      allow list:   if isMentor();
-      allow create: if isStudent() && idOwnedByMe(sessionId);
-      // Own session only, and frozen once submitted (the submit write itself flips submitted false -> true).
-      allow update: if isStudent() && idOwnedByMe(sessionId) && resource.data.submitted == false;
+      // the student themself, or the mentor / admin who owns the exam (dashboard + review pages)
+      allow get: if signedIn()
+                 && ((isStudent() && idPart(sessionId, 1) == uid())
+                     || ownsExam(idPart(sessionId, 0)));
+      allow list: if false;
+
+      // start an exam: enrolled, exam live, fresh empty session
+      allow create: if isStudent() && idPart(sessionId, 1) == uid()
+                    && enrolled(examDoc(idPart(sessionId, 0)).data.course_id)
+                    && examDoc(idPart(sessionId, 0)).data.is_live == true
+                    && request.resource.data.keys().hasOnly(["question_ids", "answers", "submitted", "started_at",
+                                                            "submitted_at", "score", "topic_scores"])
+                    && request.resource.data.keys().hasAll(["question_ids", "answers", "submitted", "started_at",
+                                                            "submitted_at", "score", "topic_scores"])
+                    && request.resource.data.question_ids is list
+                    && request.resource.data.question_ids.size() >= 1
+                    && request.resource.data.question_ids.size() <= examDoc(idPart(sessionId, 0)).data.pick_n
+                    && request.resource.data.answers == {}
+                    && request.resource.data.submitted == false
+                    && request.resource.data.started_at == request.time
+                    && request.resource.data.submitted_at == null
+                    && request.resource.data.score == null
+                    && request.resource.data.topic_scores == {};
+
+      // only the fields the exam room writes; frozen once submitted; question_ids / started_at never change
+      allow update: if isStudent() && idPart(sessionId, 1) == uid()
+                    && resource.data.submitted == false
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(["answers", "submitted", "submitted_at", "score", "topic_scores"])
+                    && request.resource.data.answers.size() <= resource.data.question_ids.size()
+                    && (request.resource.data.submitted == false
+                        || (request.resource.data.submitted == true
+                            && request.resource.data.submitted_at == request.time
+                            && request.resource.data.score is int
+                            && request.resource.data.score >= 0
+                            && request.resource.data.score <= resource.data.question_ids.size()));
       allow delete: if false;
     }
 
-    // ── results ─────────────────────────────────────────────
+    // ── results ─────────────────────────────────────────────────────────────
     match /results/{resultId} {
-      allow read:   if signedIn();
-      // Write-once, own result only.
-      allow create: if isStudent() && idOwnedByMe(resultId)
-                    && request.resource.data.student_uid == uid();
-      allow update, delete: if false;
+      // a student reads only their own; the exam's mentor / admin read the results of their exams
+      allow get: if signedIn()
+                 && ((isStudent() && idPart(resultId, 1) == uid())
+                     || ownsExam(idPart(resultId, 0)));
+      // student history: where("student_uid", "==", uid)   mentor leaderboard: where("exam_id", "==", examId)
+      allow list: if signedIn()
+                  && ((isStudent() && resource.data.student_uid == uid())
+                      || ownsExam(resource.data.exam_id));
+
+      // written once, right after the session is submitted, and it must match that session
+      allow create: if isStudent() && idPart(resultId, 1) == uid()
+                    && request.resource.data.keys().hasOnly(["exam_id", "student_uid", "exam_title", "score",
+                                                            "total", "percentage", "topic_scores", "submitted_at"])
+                    && request.resource.data.keys().hasAll(["exam_id", "student_uid", "exam_title", "score",
+                                                           "total", "percentage", "topic_scores", "submitted_at"])
+                    && request.resource.data.exam_id == idPart(resultId, 0)
+                    && request.resource.data.student_uid == uid()
+                    && request.resource.data.exam_title is string
+                    && request.resource.data.submitted_at == request.time
+                    && get(/databases/$(database)/documents/student_exams/$(resultId)).data.submitted == true
+                    && request.resource.data.score == get(/databases/$(database)/documents/student_exams/$(resultId)).data.score
+                    && request.resource.data.total == get(/databases/$(database)/documents/student_exams/$(resultId)).data.question_ids.size()
+                    && request.resource.data.total >= 1
+                    // the browser rounds with floating point, so accept the floor or the ceiling of the exact
+                    // value (e.g. 23/40 = 57.5 is stored as 57 by JavaScript) but nothing further away
+                    && request.resource.data.percentage >= math.floor(request.resource.data.score * 100.0 / request.resource.data.total)
+                    && request.resource.data.percentage <= math.ceil(request.resource.data.score * 100.0 / request.resource.data.total);
+      allow update, delete: if false;                 // results are immutable
     }
   }
 }

@@ -41,7 +41,7 @@ export default function StudentDetail({ course, student, exams, initialExamId, o
     setBundle(null);
     setLoading(true);
     try {
-      setBundle(await getResultBundle(id, student.uid));
+      setBundle(await getResultBundle(id, student.uid, exams.map(e => e.id)));
     } catch {
       setBundle(null);
     }

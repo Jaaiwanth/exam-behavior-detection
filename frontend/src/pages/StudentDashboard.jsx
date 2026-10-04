@@ -6,7 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import {
-  getAllCourses,
+  getCoursesByIds,
   getStudentEnrollments,
   getCourseExams,
 } from "../api/examApi";
@@ -29,13 +29,14 @@ export default function StudentDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const [profileSnap, allCourses, myEnrollments] = await Promise.all([
+    const [profileSnap, myEnrollments] = await Promise.all([
       getDoc(doc(db, "users", user.uid)),
-      getAllCourses(),
       getStudentEnrollments(user.uid),
     ]);
+    // a student can only read the courses they are enrolled in, so fetch those by id
+    const myCourses = await getCoursesByIds(myEnrollments);
     setProfile(profileSnap.data());
-    setCourses(allCourses);
+    setCourses(myCourses);
     setEnrolledIds(myEnrollments);
     setLoading(false);
   }
