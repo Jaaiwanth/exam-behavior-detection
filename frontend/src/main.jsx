@@ -4,12 +4,13 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-import LandingPage    from "./pages/LandingPage.jsx";
-import StudentAuth    from "./pages/StudentAuth.jsx";
-import MentorAuth     from "./pages/MentorAuth.jsx";
-import AdminApproval  from "./pages/AdminApproval.jsx";
-import StudentExam    from "./pages/StudentExam.jsx";
-import FacultyDashboard from "./pages/FacultyDashboard.jsx";
+import LandingPage      from "./pages/LandingPage.jsx";
+import StudentAuth      from "./pages/StudentAuth.jsx";
+import MentorAuth       from "./pages/MentorAuth.jsx";
+import AdminApproval    from "./pages/AdminApproval.jsx";
+import StudentDashboard from "./pages/StudentDashboard.jsx";
+import MentorDashboard  from "./pages/MentorDashboard.jsx";
+import StudentHistory   from "./pages/StudentHistory.jsx";
 import "./index.css";
 
 // Protected route — redirects to landing if not logged in
@@ -45,17 +46,26 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           path="/student/dashboard"
           element={
             <ProtectedRoute allowedRoles={["student"]}>
-              <StudentExam studentId="s001" />
+              <StudentDashboard />
             </ProtectedRoute>
           }
         />
 
-        {/* Mentor only */}
+        <Route
+          path="/student/history"
+          element={
+            <ProtectedRoute allowedRoles={["student"]}>
+              <StudentHistory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Mentor / Admin */}
         <Route
           path="/mentor/dashboard"
           element={
             <ProtectedRoute allowedRoles={["mentor", "admin"]}>
-              <FacultyDashboard studentId="s001" />
+              <MentorDashboard />
             </ProtectedRoute>
           }
         />
