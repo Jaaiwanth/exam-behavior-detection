@@ -1,16 +1,68 @@
 // src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import StudentExam from "./pages/StudentExam.jsx";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+
+import LandingPage    from "./pages/LandingPage.jsx";
+import StudentAuth    from "./pages/StudentAuth.jsx";
+import MentorAuth     from "./pages/MentorAuth.jsx";
+import AdminApproval  from "./pages/AdminApproval.jsx";
+import StudentExam    from "./pages/StudentExam.jsx";
 import FacultyDashboard from "./pages/FacultyDashboard.jsx";
 import "./index.css";
 
+// Protected route — redirects to landing if not logged in
+function ProtectedRoute({ children, allowedRoles }) {
+  const { user, role, loading } = useAuth();
+  if (loading) return <div className="loading-spinner">Loading...</div>;
+  if (!user)   return <Navigate to="/" replace />;
+  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
+  return children;
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <BrowserRouter>
-    <Routes>
-      <Route path="/" element={<StudentExam studentId="s001" />} />
-      <Route path="/faculty" element={<FacultyDashboard studentId="s001" />} />
-    </Routes>
-  </BrowserRouter>
+  <AuthProvider>
+    <BrowserRouter>
+      <Routes>
+        {/* Public */}
+        <Route path="/"               element={<LandingPage />} />
+        <Route path="/student/login"  element={<StudentAuth />} />
+        <Route path="/mentor/login"   element={<MentorAuth />} />
+
+        {/* Admin only */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminApproval />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Student only */}
+        <Route
+          path="/student/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["student"]}>
+              <StudentExam studentId="s001" />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Mentor only */}
+        <Route
+          path="/mentor/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["mentor", "admin"]}>
+              <FacultyDashboard studentId="s001" />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  </AuthProvider>
 );
