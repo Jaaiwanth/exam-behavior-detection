@@ -1,0 +1,4 @@
+# Test-only dependencies (in-memory AWS + API client)
+moto[dynamodb,s3]>=5.0
+pytest>=8.0
+httpx>=0.27

@@ -206,15 +206,15 @@ Invalid rows (bad answer letter / missing options) are skipped with a warning. A
 
 ---
 
-### Phase E — Mentor Dashboard (Pending)
+### Phase E — Mentor Dashboard (Done — needs manual test)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Student list per course | Done | Mentor dashboard, Students tab |
-| Per-student result view | Pending | Same 4 charts for any student |
-| Leaderboard per exam | Pending | Ranked by score descending |
-| Live monitoring | Exists | Faculty WebSocket in `main.py` |
-| Behaviour event log per student | Pending | DynamoDB query on `exam_events` |
+| Per-student result view | Done | Same 4 charts for any student |
+| Leaderboard per exam | Done | Ranked by score, shows student names |
+| Live monitoring | Done | `/mentor/live/:studentId` (Live button in Students tab) |
+| Behaviour event log per student | Done | Mentor-only, token-verified API; see §12 |
 
 ---
 
@@ -245,6 +245,8 @@ frontend/src/
     MonitoringStatus.jsx        Behaviour monitoring indicator          [Existing]
     QuizQuestion.jsx            Single MCQ card                        [Existing]
     Timer.jsx                   Countdown timer                         [Done]
+    ResultsView.jsx             Shared result charts + review           [Done]
+    StudentDetail.jsx           Mentor per-student results + log        [Done]
     TopicChart.jsx              Topic-wise bar chart                    [Done]
     ScoreGauge.jsx              Circular score ring                     [Done]
     TrendChart.jsx              Score trend line                        [Done]
@@ -274,7 +276,7 @@ Already set up via AWS Console. Table name: `exam_events` in `ap-south-1`.
 - [x] Project created: `exam-proctor-31750`
 - [x] Email/Password auth enabled
 - [x] Firestore database created (test mode)
-- [ ] Firestore security rules (tighten before production)
+- [ ] Firestore security rules — drafted in `firestore.rules` (repo root), not yet deployed; publish in Firebase Console > Firestore > Rules, then re-test every flow
 - [ ] S3 bucket CORS config for presigned URLs
 
 ---
@@ -316,7 +318,7 @@ Phase A — Auth          85%   Routes, pages, Firebase auth all done
 Phase B — Exam setup    90%   Mentor dashboard + examApi + student enroll done; untested against live Firestore
 Phase C — Exam room     90%   ExamRoom + Timer done; untested end-to-end with backend
 Phase D — Results       90%   Results page, 4 charts, history done; untested with live data
-Phase E — Mentor dash   10%   Live feed exists, analytics pending
+Phase E — Mentor dash   90%   Students, results, leaderboard, behaviour log, live link done; untested
 ```
 
 ---
@@ -331,3 +333,27 @@ Phase E — Mentor dash   10%   Live feed exists, analytics pending
 | Results | `feat(results):` | `feat(results): topic-wise chart` |
 | Mentor | `feat(mentor):` | `feat(mentor): leaderboard view` |
 | Fixes | `fix:` | `fix: mentor pending role check on login` |
+
+---
+
+## 12. Manual Review Pipeline (score 0 = "needs review", never an automatic verdict)
+
+```
+ML warning -> DynamoDB event + S3 clip -> score 0 -> session PENDING_REVIEW
+           -> mentor opens Behaviour Log -> "View Recording" (presigned URL)
+           -> mentor decision: Cleared | Confirmed Violation  (persisted)
+```
+
+- **DynamoDB `exam_events`** (PK `exam_id`, SK `sort_key`, GSI `student-index`; see `infra/dynamo_setup.py`)
+  - Warning event: `exam_id, student_id, event_id, timestamp, warning_type, sanity_score, flagged, session_id, review_status, recording_status, s3_object_key`
+  - Session record (`sort_key = SESSION#<student_id>`): `review_status` = `NOT_REQUIRED | PENDING_REVIEW | CLEARED | CONFIRMED_VIOLATION`, `warning_count, last_score, reviewed_by, reviewed_at, mentor_decision, mentor_notes`
+- **S3** (private): `recordings/<exam>/<student>/<event>.mp4`, H.264. Only the object key is stored; mentors get a 5-minute presigned URL on demand.
+- **Backend** (`backend/`): `dynamo_logger.py`, `s3_store.py`, `recorder.py` (rolling 6 s pre / 4 s post-roll clip), `auth.py` (Firebase ID-token check + role/exam-ownership), `review_api.py`.
+- **API** (mentor/admin only, must own the exam; students get 403):
+  - `GET   /api/exams/{exam_id}/reviews`
+  - `GET   /api/events/{student_id}?exam_id=`
+  - `GET   /api/events/{event_id}/recording?exam_id=`
+  - `PATCH /api/events/{event_id}/review?exam_id=`  body `{decision, notes}`
+- **Frontend:** `components/BehaviourReview.jsx`, "Behaviour Review" queue on the exam detail page, status badges in the student view.
+- **Tests:** `py -3.11 -m pytest backend/tests -q -s` (moto = in-memory AWS; WebSocket exercised with a scripted ML stand-in).
+- **Env vars:** `FIREBASE_PROJECT_ID` (default `exam-proctor-31750`), `RECORDING_BUCKET`, `DYNAMO_TABLE`, `AWS_REGION`, `PRESIGN_EXPIRES_SEC`.

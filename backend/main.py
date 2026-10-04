@@ -64,7 +64,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.monitor_session import ExamMonitor
-from backend.dynamo_logger   import log_event
+from backend.dynamo_logger   import log_event, attach_recording_async
+from backend.recorder        import ClipRecorder, encode_and_upload
+from backend.review_api      import router as review_router
+from backend                 import s3_store
 
 # ---------------------------------------------------------------------------
 logging.basicConfig(
@@ -85,6 +88,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(review_router)
+
+# asyncio only keeps weak references to tasks — hold clip-upload tasks here until they finish
+_background_tasks: set = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 # ---------------------------------------------------------------------------
 # Quiz data — hardcoded for the prototype.
@@ -244,11 +258,27 @@ async def reset_score(student_id: str):
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws/student/{student_id}")
-async def student_ws(websocket: WebSocket, student_id: str):
+async def student_ws(
+    websocket: WebSocket,
+    student_id: str,
+    exam_id: str = "default",
+    session_id: str = "default",
+):
+    # exam_id / session_id (query params) tag DynamoDB events and S3 clips per exam
     await websocket.accept()
-    logger.info("Student connected: %s", student_id)
+    logger.info("Student connected: %s (exam=%s)", student_id, exam_id)
 
-    monitor = registry.get_or_create_monitor(student_id)
+    monitor  = registry.get_or_create_monitor(student_id)
+    recorder = ClipRecorder()
+
+    async def finish_clip(event: dict, frames: list) -> None:
+        """Encode + upload one warning clip, then link its S3 key to the DynamoDB event."""
+        key = s3_store.recording_key(exam_id, student_id, event["event_id"])
+        ok = await asyncio.get_running_loop().run_in_executor(
+            None, encode_and_upload, frames, key, s3_store.upload_clip
+        )
+        await attach_recording_async(exam_id, event["sort_key"], key if ok else None)
+        logger.info("Warning clip %s -> %s", event["event_id"][:8], "uploaded" if ok else "FAILED")
 
     try:
         while True:
@@ -277,6 +307,10 @@ async def student_ws(websocket: WebSocket, student_id: str):
             if frame_bgr is None:
                 continue
 
+            # Keep a rolling buffer; finish any warning clips whose post-roll has elapsed
+            for event, frames in recorder.feed(frame_bgr):
+                _spawn(finish_clip(event, frames))
+
             # Run the pipeline in a thread so the event loop stays responsive
             result = await asyncio.get_event_loop().run_in_executor(
                 None, monitor.process_frame, frame_bgr
@@ -295,13 +329,20 @@ async def student_ws(websocket: WebSocket, student_id: str):
             }
             await websocket.send_text(json.dumps(student_status))
 
-            # ── DynamoDB: log only when a new warning fired ──────────
+            # ── DynamoDB + S3: log only when a new warning fired ─────
+            # A score of 0 only flags the session as PENDING_REVIEW (see dynamo_logger).
+            # It never fails, punishes or submits the student — the mentor decides.
             if result_dict["new_warning"]:
-                await log_event(
+                event = await log_event(
+                    exam_id=exam_id,
                     student_id=student_id,
-                    reason=result_dict["new_warning"],
-                    score_after=result_dict["score"],
+                    warning_type=result_dict["new_warning"],
+                    sanity_score=result_dict["score"],
+                    session_id=session_id,
+                    warning_count=result_dict["warnings"],
                 )
+                if event:
+                    recorder.arm(event)
 
             # ── Broadcast full analysis + frame to faculty ────────────
             faculty_payload = {
@@ -317,6 +358,8 @@ async def student_ws(websocket: WebSocket, student_id: str):
     except Exception as exc:
         logger.error("Student WS error (%s): %s", student_id, exc)
     finally:
+        for event, frames in recorder.flush():      # clips still waiting for post-roll
+            _spawn(finish_clip(event, frames))
         registry.remove_monitor(student_id)
 
 

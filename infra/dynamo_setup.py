@@ -18,16 +18,24 @@ Schema
     PK: student_id           — query all warnings for one student
     SK: sort_key
 
-Attributes written per warning event (by dynamo_logger.py):
-  student_id       String   Firebase UID or student code
-  session_id       String   UUID per exam session
-  event_type       String   "WARNING" | "SESSION_START" | "SESSION_END"
-  reason           String   "Phone detected", "Head turned left", etc.
-  score_after      Number   Trust score after event (0–100)
-  flagged          Boolean  True when score reaches 0
-  recording_key    String   S3 key for clip, populated after upload completes
-  faculty_decision String   "APPROVED" | "MALPRACTICE" — null until faculty acts
-  decision_ts      String   ISO-8601 timestamp of faculty decision
+Items (written by backend/dynamo_logger.py)
+-------------------------------------------
+  WARNING event     sort_key = "<iso-ts>#<student_id>#<event_id8>"
+    student_id, event_id, timestamp, event_type="WARNING", warning_type,
+    sanity_score (0-100), flagged (True when score reached 0), session_id,
+    review_status, recording_status ("PENDING" | "READY" | "FAILED"),
+    s3_object_key (internal S3 key, set after upload; never a public URL),
+    reviewed_by / reviewed_at / mentor_decision / mentor_notes (after review)
+
+  SESSION review    sort_key = "SESSION#<student_id>"   (one per student per exam)
+    review_status: NOT_REQUIRED | PENDING_REVIEW | CLEARED | CONFIRMED_VIOLATION
+    warning_count, last_score, flagged_at, reviewed_by, reviewed_at,
+    mentor_decision, mentor_notes
+    Score 0 => PENDING_REVIEW only. Only a mentor decision marks a violation.
+
+NOTE: DynamoDB keys cannot be changed. If an older exam_events table with a
+different key schema (e.g. PK student_id) already exists, delete it (or set
+DYNAMO_TABLE to a new name) and run this script again.
 
 Usage
 -----

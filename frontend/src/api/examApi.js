@@ -335,3 +335,48 @@ export async function getExamLeaderboard(examId) {
   });
   return ranked;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   RESULT BUNDLE / USER LOOKUPS (student results page + mentor view)
+───────────────────────────────────────────────────────────── */
+
+/**
+ * Everything needed to render one student's result for one exam:
+ * { result, review, trend, rank, participants } or null if not submitted.
+ */
+export async function getResultBundle(examId, studentUid) {
+  const result = await getResult(examId, studentUid);
+  if (!result) return null;
+
+  const [history, session, bank, board] = await Promise.all([
+    getStudentHistory(studentUid),
+    getStudentExamSession(examId, studentUid),
+    getQuestionBank(examId),
+    getExamLeaderboard(examId),
+  ]);
+
+  const bankMap = Object.fromEntries(bank.map(q => [q.id, q]));
+  const review = (session?.question_ids || [])
+    .map(id => bankMap[id])
+    .filter(Boolean)
+    .map(q => ({ ...q, given: session.answers?.[q.id] || null }));
+
+  const mine = board.find(r => r.student_uid === studentUid);
+  const trend = [...history].reverse().map(r => ({
+    label: r.exam_title || "Exam",
+    pct: r.percentage,
+  }));
+
+  return { result, review, trend, rank: mine?.rank, participants: board.length };
+}
+
+/** Map of uid -> { name, reg_no, email } for the given user ids */
+export async function getUserProfiles(uids) {
+  const entries = await Promise.all(
+    [...new Set(uids)].map(async uid => {
+      const snap = await getDoc(doc(db, "users", uid));
+      return [uid, snap.exists() ? snap.data() : { name: "(unknown)" }];
+    })
+  );
+  return Object.fromEntries(entries);
+}

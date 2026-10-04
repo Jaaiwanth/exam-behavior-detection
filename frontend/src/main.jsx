@@ -1,7 +1,7 @@
 // src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import LandingPage      from "./pages/LandingPage.jsx";
@@ -13,7 +13,14 @@ import MentorDashboard  from "./pages/MentorDashboard.jsx";
 import StudentHistory   from "./pages/StudentHistory.jsx";
 import ExamRoom         from "./pages/ExamRoom.jsx";
 import Results          from "./pages/Results.jsx";
+import FacultyDashboard from "./pages/FacultyDashboard.jsx";
 import "./index.css";
+
+// Live monitor for one student (uid taken from the URL)
+function LiveMonitor() {
+  const { studentId } = useParams();
+  return <FacultyDashboard studentId={studentId} />;
+}
 
 // Protected route — redirects to landing if not logged in
 function ProtectedRoute({ children, allowedRoles }) {
@@ -84,6 +91,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           element={
             <ProtectedRoute allowedRoles={["mentor", "admin"]}>
               <MentorDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/mentor/live/:studentId"
+          element={
+            <ProtectedRoute allowedRoles={["mentor", "admin"]}>
+              <LiveMonitor />
             </ProtectedRoute>
           }
         />

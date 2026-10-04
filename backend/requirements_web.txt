@@ -19,6 +19,11 @@ websockets>=12.0
 # ─── AWS SDK ─────────────────────────────────────────────────
 boto3>=1.34.0
 
+# ─── Mentor review: Firebase token check + clip encoding ─────
+google-auth>=2.29.0        # verify Firebase ID tokens
+requests>=2.31.0           # Firestore REST role/exam lookups
+imageio-ffmpeg>=0.5.1      # bundled ffmpeg (libx264) for browser-playable MP4 clips
+
 # ─── Already in requirements.txt — listed here for clarity ───
 # opencv-python>=4.9.0
 # numpy>=1.26.0

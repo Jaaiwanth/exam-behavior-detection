@@ -6,6 +6,8 @@ import { doc, getDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { auth, db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import StudentDetail from "../components/StudentDetail.jsx";
+import { getExamReviews, REVIEW_LABELS, REVIEW_BADGE } from "../api/events";
 import {
   createCourse,
   getMentorCourses,
@@ -18,6 +20,7 @@ import {
   findStudent,
   enrollStudent,
   unenrollStudent,
+  getUserProfiles,
   getExamLeaderboard,
 } from "../api/examApi";
 
@@ -55,6 +58,11 @@ export default function MentorDashboard() {
   const [studentInput, setStudentInput] = useState("");
   const [addingStudents, setAddingStudents] = useState(false);
   const [studentMsgs, setStudentMsgs]   = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [names, setNames]               = useState({}); // uid -> profile, for the leaderboard
+  const [reviews, setReviews]           = useState([]);  // behaviour-review sessions for the open exam
+  const [reviewsError, setReviewsError] = useState("");
+  const [reviewExamId, setReviewExamId] = useState(null); // exam to open in the student detail view
 
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState(false);
@@ -92,11 +100,35 @@ export default function MentorDashboard() {
     ]);
     setQuestions(bank);
     setLeaderboard(lb);
+    setNames(await getUserProfiles(lb.map(r => r.student_uid)));
+    loadReviews(exam.id);
+  }
+
+  async function loadReviews(examId) {
+    setReviews([]);
+    setReviewsError("");
+    try {
+      const sessions = await getExamReviews(examId);
+      setReviews(sessions);
+      const profiles = await getUserProfiles(sessions.map(x => x.student_id));
+      setNames(prev => ({ ...prev, ...profiles }));
+    } catch (err) {
+      setReviewsError(err.message);
+    }
+  }
+
+  function openReview(session) {
+    const p = names[session.student_id] || {};
+    setSelectedStudent({ uid: session.student_id, name: p.name || session.student_id, reg_no: p.reg_no, email: p.email });
+    setReviewExamId(selectedExam.id);
+    setActiveTab("students");
   }
 
   /* ── Students ──────────────────────────────────────────── */
   async function openStudents() {
     setActiveTab("students");
+    setSelectedStudent(null);
+    setReviewExamId(null);
     setStudentMsgs([]);
     setStudents(await getCourseStudentProfiles(selectedCourse.id));
   }
@@ -442,7 +474,17 @@ export default function MentorDashboard() {
         )}
 
         {/* STUDENTS TAB */}
-        {activeTab === "students" && selectedCourse && (
+        {activeTab === "students" && selectedCourse && selectedStudent && (
+          <StudentDetail
+            course={selectedCourse}
+            student={selectedStudent}
+            exams={exams}
+            initialExamId={reviewExamId}
+            onBack={() => { setSelectedStudent(null); setReviewExamId(null); }}
+          />
+        )}
+
+        {activeTab === "students" && selectedCourse && !selectedStudent && (
           <div className="fade-in">
             <div className="page-header">
               <div>
@@ -490,9 +532,17 @@ export default function MentorDashboard() {
                           {st.name}
                           <span className="q-topic"> · {st.reg_no || st.email}</span>
                         </span>
-                        <button className="modal-cancel" onClick={() => handleRemoveStudent(st)}>
-                          Remove
-                        </button>
+                        <div className="exam-actions">
+                          <button className="exam-detail-btn" onClick={() => setSelectedStudent(st)}>
+                            Results
+                          </button>
+                          <button className="exam-detail-btn" onClick={() => navigate(`/mentor/live/${st.uid}`)}>
+                            🔴 Live
+                          </button>
+                          <button className="modal-cancel" onClick={() => handleRemoveStudent(st)}>
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -617,6 +667,43 @@ export default function MentorDashboard() {
                 )}
               </section>
 
+              {/* Behaviour review queue */}
+              <section className="detail-card full-width">
+                <h2>
+                  🚩 Behaviour Review
+                  {reviews.some(r => r.review_status === "PENDING_REVIEW") && (
+                    <span className="badge badge-warn" style={{ marginLeft: 10 }}>
+                      {reviews.filter(r => r.review_status === "PENDING_REVIEW").length} pending
+                    </span>
+                  )}
+                </h2>
+                <p className="detail-hint">
+                  Students whose integrity score reached 0 need your manual review. A score of 0 is a flag, not a verdict.
+                </p>
+                {reviewsError && <div className="alert error">{reviewsError}</div>}
+                {!reviewsError && reviews.length === 0 && (
+                  <p className="detail-hint">No behaviour warnings recorded for this exam.</p>
+                )}
+                {reviews.length > 0 && (
+                  <table className="leaderboard-table">
+                    <thead>
+                      <tr><th>Student</th><th>Warnings</th><th>Score</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {reviews.map(r => (
+                        <tr key={r.student_id} className={r.review_status === "PENDING_REVIEW" ? "top-rank" : ""}>
+                          <td>{names[r.student_id]?.name || r.student_id}</td>
+                          <td>{r.warning_count}</td>
+                          <td>{r.last_score} / 100</td>
+                          <td><span className={`badge ${REVIEW_BADGE[r.review_status]}`}>{REVIEW_LABELS[r.review_status]}</span></td>
+                          <td><button className="exam-detail-btn" onClick={() => openReview(r)}>Open</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+
               {/* Leaderboard */}
               <section className="detail-card full-width">
                 <h2>🏆 Leaderboard ({leaderboard.length} submissions)</h2>
@@ -639,7 +726,7 @@ export default function MentorDashboard() {
                           <td>
                             {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `#${r.rank}`}
                           </td>
-                          <td>{r.student_uid}</td>
+                          <td>{names[r.student_uid]?.name || r.student_uid}</td>
                           <td>{r.score} / {r.total}</td>
                           <td>
                             <div className="score-bar-wrap">

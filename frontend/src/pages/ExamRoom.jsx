@@ -141,7 +141,7 @@ export default function ExamRoom() {
       });
 
       wsRef.current = openSocket(
-        `/ws/student/${user.uid}`,
+        `/ws/student/${user.uid}?exam_id=${encodeURIComponent(examId)}`,
         () => {},               // status messages are intentionally hidden from the student
         () => setWsConnected(true),
         () => setWsConnected(false),

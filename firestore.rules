@@ -1,0 +1,101 @@
+rules_version = '2';
+
+// ExamProctor — Firestore security rules (DRAFT: review, then deploy with
+// `firebase deploy --only firestore:rules` or paste into Firebase Console > Firestore > Rules).
+//
+// Roles live in users/{uid}.role: "student" | "mentor" | "pending" | "admin" | "rejected".
+// Known limits (need a backend / Cloud Functions to close fully):
+//   - student_exams and results are written by the client, so a determined student
+//     could write a false score. Rules only stop edits after submission and writes for other users.
+//   - Question banks (with correct answers) are readable by any signed-in user.
+//   - Any signed-in user can read results (the rank / leaderboard queries need this).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid()      { return request.auth.uid; }
+    function myRole()   { return get(/databases/$(database)/documents/users/$(uid())).data.role; }
+    function isAdmin()  { return signedIn() && myRole() == "admin"; }
+    function isMentor() { return signedIn() && (myRole() == "mentor" || myRole() == "admin"); }
+    function isStudent(){ return signedIn() && myRole() == "student"; }
+
+    // Compound ids look like "{examId}__{studentUid}" / "{courseId}__{studentUid}"
+    function idOwnedByMe(id) { return signedIn() && id.split("__")[1] == uid(); }
+
+    // ── users ───────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if signedIn() && (userId == uid() || isMentor());
+      // Self-signup may only create a student or pending-mentor profile — never mentor/admin.
+      allow create: if signedIn() && userId == uid()
+                    && request.resource.data.role in ["student", "pending"];
+      // Users cannot change their own role; admin (approval page) can change anything.
+      allow update: if isAdmin()
+                    || (signedIn() && userId == uid()
+                        && request.resource.data.role == resource.data.role);
+      allow delete: if false;
+    }
+
+    // ── mentor approval requests ────────────────────────────
+    match /pending_mentors/{userId} {
+      allow create: if signedIn() && userId == uid()
+                    && request.resource.data.status == "pending";
+      allow read:   if isAdmin() || (signedIn() && userId == uid());
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Login looks up reg_no -> email BEFORE the user is signed in, so reads must be open.
+    // Single-document reads only (no listing), and no client writes.
+    match /reg_map/{regNo} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // ── courses ─────────────────────────────────────────────
+    match /courses/{courseId} {
+      allow read:   if signedIn();
+      allow create: if isMentor() && request.resource.data.mentor_uid == uid();
+      allow update, delete: if isAdmin() || (isMentor() && resource.data.mentor_uid == uid());
+    }
+
+    // ── enrollments (mentor-managed) ────────────────────────
+    match /enrollments/{enrollId} {
+      allow get:    if isMentor() || idOwnedByMe(enrollId);
+      allow list:   if isMentor() || (signedIn() && resource.data.student_uid == uid());
+      allow create, update, delete: if isMentor();
+    }
+
+    // ── exams ───────────────────────────────────────────────
+    match /exams/{examId} {
+      allow read:   if signedIn();
+      allow create: if isMentor() && request.resource.data.created_by == uid();
+      allow update, delete: if isAdmin() || (isMentor() && resource.data.created_by == uid());
+    }
+
+    // ── question banks ──────────────────────────────────────
+    match /questions/{examId}/bank/{questionId} {
+      allow read:  if signedIn();
+      allow write: if isMentor();
+    }
+
+    // ── a student's in-progress / submitted exam ────────────
+    match /student_exams/{sessionId} {
+      allow get:    if isMentor() || idOwnedByMe(sessionId);
+      allow list:   if isMentor();
+      allow create: if isStudent() && idOwnedByMe(sessionId);
+      // Own session only, and frozen once submitted (the submit write itself flips submitted false -> true).
+      allow update: if isStudent() && idOwnedByMe(sessionId) && resource.data.submitted == false;
+      allow delete: if false;
+    }
+
+    // ── results ─────────────────────────────────────────────
+    match /results/{resultId} {
+      allow read:   if signedIn();
+      // Write-once, own result only.
+      allow create: if isStudent() && idOwnedByMe(resultId)
+                    && request.resource.data.student_uid == uid();
+      allow update, delete: if false;
+    }
+  }
+}
