@@ -10,7 +10,7 @@ const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
  * @param {string}   path         - e.g. "/ws/student/s001"
  * @param {function} onMessage    - called with parsed JSON payload
  * @param {function} [onOpen]     - called when connection opens
- * @param {function} [onClose]    - called when connection closes
+ * @param {function} [onClose]    - called when connection closes (receives the CloseEvent)
  * @param {function} [onError]    - called on error
  * @returns {WebSocket}
  */
@@ -31,9 +31,9 @@ export function openSocket(path, onMessage, onOpen, onClose, onError) {
     }
   };
 
-  ws.onclose = () => {
-    console.log(`[WS] Disconnected: ${path}`);
-    onClose?.();
+  ws.onclose = (event) => {
+    console.log(`[WS] Disconnected: ${path} (code ${event?.code})`);
+    onClose?.(event);
   };
 
   ws.onerror = (err) => {

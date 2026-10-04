@@ -299,6 +299,15 @@ class ExamMonitor:
         self._yolo_obj_elapsed  = {k: 0.0  for k in YOLO_TIMERS}
         logger.info("Score reset.")
 
+    def restore_state(self, score: int, warnings: int) -> None:
+        """
+        Re-apply the server-side score after a reconnect / refresh so reconnecting
+        can never reset a student's integrity score. Calibration still restarts.
+        """
+        self._score    = max(0, min(STARTING_SCORE, int(score)))
+        self._warnings = max(0, int(warnings))
+        logger.info("Session state restored (score=%d, warnings=%d).", self._score, self._warnings)
+
     def recalibrate(self) -> None:
         """Restart calibration and face enrollment."""
         self._calib.reset()

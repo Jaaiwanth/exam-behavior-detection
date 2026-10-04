@@ -357,3 +357,30 @@ ML warning -> DynamoDB event + S3 clip -> score 0 -> session PENDING_REVIEW
 - **Frontend:** `components/BehaviourReview.jsx`, "Behaviour Review" queue on the exam detail page, status badges in the student view.
 - **Tests:** `py -3.11 -m pytest backend/tests -q -s` (moto = in-memory AWS; WebSocket exercised with a scripted ML stand-in).
 - **Env vars:** `FIREBASE_PROJECT_ID` (default `exam-proctor-31750`), `RECORDING_BUCKET`, `DYNAMO_TABLE`, `AWS_REGION`, `PRESIGN_EXPIRES_SEC`.
+
+---
+
+## 13. Student browser -> ML pipeline
+
+```
+ExamRoom.jsx (gate: Enable Camera -> preview -> Start/Resume)
+  -> hooks/useProctoring.js   one getUserMedia stream; fullscreen requested on Start
+  -> WS /ws/student/{uid}?exam_id=..&session_id={exam}__{uid}
+       1. client -> {"type":"auth","token":<Firebase ID token>}   (uid must equal {uid}, role student)
+       2. server -> {"type":"auth_ok"}
+       3. client -> {"type":"frame","data":<base64 JPEG>} every 500 ms (~2 FPS)
+       4. server -> {"type":"status","calibrating":..,"calib_progress":..}   (never score / warnings)
+  -> backend/main.py student_ws -> ExamMonitor (MediaPipe + YOLO + face verifier)
+  -> warning: DynamoDB event + private S3 clip; score 0 => session PENDING_REVIEW (no auto-fail/submit)
+```
+
+- Reconnect: client retries with backoff (1-10 s); the server restores score + warning count from the
+  DynamoDB session record, so a refresh/reconnect can never reset the integrity score.
+- One live session per student: a new connection closes the old one (code 4000).
+- Camera lost/denied/in-use: clear message + "Reconnect camera" overlay; the exam timer keeps running.
+- `recalibrate` / `reset` are staff-only HTTP actions; students cannot send them over the socket.
+- `/ws/faculty/{uid}` now needs a staff token too (same first-message handshake).
+- Dev only: `WS_AUTH=0` skips token verification (used by the browser test harness). Never set it in production.
+- Tests: `py -3.11 -m pytest backend/tests -q` (8 tests, moto) and the real-browser/real-AWS run
+  `py -3.11 backend/tests/e2e_browser_proctor.py <fake-webcam.mjpeg>` (uses `frontend/proctor-harness.html`).
+

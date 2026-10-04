@@ -17,13 +17,14 @@ Environment:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, WebSocket
 
 logger = logging.getLogger(__name__)
 
@@ -119,3 +120,62 @@ def ensure_exam_access(caller: Caller, exam_id: str) -> None:
         raise HTTPException(status_code=404, detail="Exam not found.")
     if owner != caller.uid:
         raise HTTPException(status_code=403, detail="You do not own this exam.")
+
+
+# ---------------------------------------------------------------------------
+# WebSocket handshake
+# ---------------------------------------------------------------------------
+
+WS_AUTH_ENABLED = os.environ.get("WS_AUTH", "1") != "0"     # "0" only for local harness tests
+WS_AUTH_TIMEOUT = 10.0
+
+
+async def authenticate_ws(
+    websocket: WebSocket,
+    expected_uid: Optional[str],
+    roles: tuple,
+) -> Optional[Caller]:
+    """
+    Browsers cannot set an Authorization header on a WebSocket, so the first message
+    must be {"type": "auth", "token": "<Firebase ID token>"}.
+
+    Closes the socket and returns None unless the token is valid, the user's role is in
+    `roles`, and (when given) the token's uid equals `expected_uid`.
+    Close codes: 4401 not authenticated, 4403 not allowed.
+    """
+    import json
+
+    if not WS_AUTH_ENABLED:
+        # Local harness mode: same protocol (client still sends an auth message), no verification.
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=WS_AUTH_TIMEOUT)
+            if json.loads(raw).get("type") != "auth":
+                raise ValueError("first message must be an auth message")
+        except Exception:  # noqa: BLE001
+            await websocket.close(code=4401)
+            return None
+        await websocket.send_text(json.dumps({"type": "auth_ok"}))
+        return Caller(uid=expected_uid or "dev", role=roles[0], token="")
+
+    loop = asyncio.get_running_loop()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=WS_AUTH_TIMEOUT)
+        msg = json.loads(raw)
+        if msg.get("type") != "auth" or not msg.get("token"):
+            raise ValueError("first message must be an auth message")
+        token = msg["token"]
+        claims = await loop.run_in_executor(None, verify_id_token, token)
+        uid = claims.get("user_id") or claims.get("sub")
+        role = await loop.run_in_executor(None, fetch_role, uid, token)
+    except Exception as exc:  # noqa: BLE001 — any failure means "not authenticated"
+        logger.info("WebSocket auth failed: %s", exc)
+        await websocket.close(code=4401)
+        return None
+
+    if role not in roles or (expected_uid is not None and uid != expected_uid):
+        logger.info("WebSocket auth rejected: uid=%s role=%s expected=%s", uid, role, expected_uid)
+        await websocket.close(code=4403)
+        return None
+
+    await websocket.send_text(json.dumps({"type": "auth_ok"}))
+    return Caller(uid=uid, role=role, token=token)

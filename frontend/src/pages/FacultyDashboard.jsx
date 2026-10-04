@@ -2,7 +2,8 @@
 // Faculty-facing: live camera feed, behaviour events, score, flags.
 import React, { useEffect, useRef, useState } from "react";
 import MonitoringStatus from "../components/MonitoringStatus.jsx";
-import { openSocket } from "../api/websocket.js";
+import { openSocket, sendJSON } from "../api/websocket.js";
+import { auth } from "../firebase";
 
 export default function FacultyDashboard({ studentId = "s001" }) {
   const [analysis, setAnalysis]     = useState(null);
@@ -40,7 +41,12 @@ export default function FacultyDashboard({ studentId = "s001" }) {
           }, ...prev].slice(0, 50)); // keep last 50 events
         }
       },
-      () => setWsConnected(true),
+      async () => {
+        // The backend only streams live video / scores to authenticated staff.
+        const token = await auth.currentUser?.getIdToken();
+        if (token) sendJSON(wsRef.current, { type: "auth", token });
+        setWsConnected(true);
+      },
       () => setWsConnected(false),
     );
     return () => wsRef.current?.close();

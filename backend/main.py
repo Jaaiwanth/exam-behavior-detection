@@ -60,11 +60,12 @@ from typing import Dict, List, Optional, Set
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.monitor_session import ExamMonitor
-from backend.dynamo_logger   import log_event, attach_recording_async
+from backend.dynamo_logger   import log_event, attach_recording_async, get_session
+from backend.auth            import Caller, authenticate_ws, require_staff
 from backend.recorder        import ClipRecorder, encode_and_upload
 from backend.review_api      import router as review_router
 from backend                 import s3_store
@@ -153,22 +154,41 @@ class SessionRegistry:
     """Tracks active ExamMonitor instances and faculty WebSocket connections."""
 
     def __init__(self):
-        # student_id → ExamMonitor instance
+        # student_id → ExamMonitor instance (owned by the newest student connection)
         self._monitors: Dict[str, ExamMonitor] = {}
+        # student_id → the student WebSocket that currently owns that monitor
+        self._owners: Dict[str, WebSocket] = {}
         # student_id → set of faculty WebSocket connections watching them
         self._faculty_sockets: Dict[str, Set[WebSocket]] = {}
 
-    def get_or_create_monitor(self, student_id: str) -> ExamMonitor:
-        if student_id not in self._monitors:
-            self._monitors[student_id] = ExamMonitor()
-            logger.info("New ExamMonitor created for student=%s", student_id)
-        return self._monitors[student_id]
+    def _new_monitor(self) -> ExamMonitor:
+        return ExamMonitor()
 
-    def remove_monitor(self, student_id: str) -> None:
-        m = self._monitors.pop(student_id, None)
-        if m:
-            m.close()
-            logger.info("ExamMonitor closed for student=%s", student_id)
+    async def attach_monitor(self, student_id: str, ws: WebSocket) -> ExamMonitor:
+        """
+        Give this connection its own monitor. If the student already has a connection
+        (refresh / reconnect), the older socket is closed so there is never more than one
+        live session per student — and the older one cannot tear down the new monitor.
+        """
+        old = self._owners.get(student_id)
+        if old is not None and old is not ws:
+            logger.info("Replacing previous connection for student=%s", student_id)
+            try:
+                await old.close(code=4000)
+            except Exception:
+                pass
+        monitor = self._new_monitor()
+        self._monitors[student_id] = monitor
+        self._owners[student_id] = ws
+        logger.info("New ExamMonitor created for student=%s", student_id)
+        return monitor
+
+    def detach_monitor(self, student_id: str, ws: WebSocket) -> None:
+        """Unregister only if this connection still owns the student's monitor."""
+        if self._owners.get(student_id) is ws:
+            self._owners.pop(student_id, None)
+            self._monitors.pop(student_id, None)
+            logger.info("ExamMonitor released for student=%s", student_id)
 
     def add_faculty(self, student_id: str, ws: WebSocket) -> None:
         self._faculty_sockets.setdefault(student_id, set()).add(ws)
@@ -236,7 +256,8 @@ async def get_quiz():
 
 
 @app.post("/api/session/{student_id}/recalibrate")
-async def recalibrate(student_id: str):
+async def recalibrate(student_id: str, caller: Caller = Depends(require_staff)):
+    # Staff only: a student must never be able to reset their own baseline.
     monitor = registry._monitors.get(student_id)
     if not monitor:
         raise HTTPException(status_code=404, detail="No active session for this student.")
@@ -245,7 +266,8 @@ async def recalibrate(student_id: str):
 
 
 @app.post("/api/session/{student_id}/reset")
-async def reset_score(student_id: str):
+async def reset_score(student_id: str, caller: Caller = Depends(require_staff)):
+    # Staff only: a student must never be able to reset their own score.
     monitor = registry._monitors.get(student_id)
     if not monitor:
         raise HTTPException(status_code=404, detail="No active session for this student.")
@@ -257,6 +279,9 @@ async def reset_score(student_id: str):
 # Student WebSocket
 # ---------------------------------------------------------------------------
 
+MAX_FRAME_MSG_BYTES = 2_000_000
+
+
 @app.websocket("/ws/student/{student_id}")
 async def student_ws(
     websocket: WebSocket,
@@ -264,42 +289,55 @@ async def student_ws(
     exam_id: str = "default",
     session_id: str = "default",
 ):
-    # exam_id / session_id (query params) tag DynamoDB events and S3 clips per exam
+    """
+    Browser -> ML pipeline. Protocol:
+      1. client connects to /ws/student/{uid}?exam_id=...&session_id=...
+      2. client sends {"type":"auth","token":<Firebase ID token>}; token uid must equal {uid}
+      3. client sends {"type":"frame","data":<base64 JPEG>} ~2 per second
+    The student only ever receives {"type":"status","calibrating":..,"calib_progress":..}.
+    Score / warnings are never sent to the student browser.
+    """
     await websocket.accept()
+
+    caller = await authenticate_ws(websocket, expected_uid=student_id, roles=("student",))
+    if caller is None:
+        return
     logger.info("Student connected: %s (exam=%s)", student_id, exam_id)
 
-    monitor  = registry.get_or_create_monitor(student_id)
+    monitor  = await registry.attach_monitor(student_id, websocket)
     recorder = ClipRecorder()
+    loop     = asyncio.get_running_loop()
+
+    # A refresh / reconnect must not hand the student a fresh 100: restore the server-side
+    # score and warning count from this exam's session record.
+    last_warn_count = 0
+    try:
+        prior = await loop.run_in_executor(None, get_session, exam_id, student_id)
+        if prior:
+            monitor.restore_state(prior.get("last_score", 100), prior.get("warning_count", 0))
+            last_warn_count = int(prior.get("warning_count", 0))
+    except Exception as exc:
+        logger.warning("Could not restore session state (%s/%s): %s", exam_id, student_id, exc)
 
     async def finish_clip(event: dict, frames: list) -> None:
         """Encode + upload one warning clip, then link its S3 key to the DynamoDB event."""
         key = s3_store.recording_key(exam_id, student_id, event["event_id"])
-        ok = await asyncio.get_running_loop().run_in_executor(
-            None, encode_and_upload, frames, key, s3_store.upload_clip
-        )
+        ok = await loop.run_in_executor(None, encode_and_upload, frames, key, s3_store.upload_clip)
         await attach_recording_async(exam_id, event["sort_key"], key if ok else None)
         logger.info("Warning clip %s -> %s", event["event_id"][:8], "uploaded" if ok else "FAILED")
 
     try:
         while True:
             raw = await websocket.receive_text()
-            msg = json.loads(raw)
-
-            msg_type = msg.get("type", "")
-
-            # ── Control messages ──────────────────────────────────────
-            if msg_type == "recalibrate":
-                monitor.recalibrate()
-                await websocket.send_text(json.dumps({"type": "ack", "action": "recalibrate"}))
+            if len(raw) > MAX_FRAME_MSG_BYTES:
+                continue
+            try:
+                msg = json.loads(raw)
+            except ValueError:
                 continue
 
-            if msg_type == "reset":
-                monitor.reset_score()
-                await websocket.send_text(json.dumps({"type": "ack", "action": "reset"}))
-                continue
-
-            # ── Frame message ─────────────────────────────────────────
-            if msg_type != "frame":
+            # Only frames are accepted from students. recalibrate / reset are staff-only HTTP actions.
+            if msg.get("type") != "frame":
                 continue
 
             b64 = msg.get("data", "")
@@ -312,27 +350,23 @@ async def student_ws(
                 _spawn(finish_clip(event, frames))
 
             # Run the pipeline in a thread so the event loop stays responsive
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, monitor.process_frame, frame_bgr
-            )
-
+            result = await loop.run_in_executor(None, monitor.process_frame, frame_bgr)
             result_dict = result.to_dict()
 
-            # ── Send lightweight status update to student ─────────────
-            student_status = {
-                "type":          "status",
-                "score":         result_dict["score"],
-                "warnings":      result_dict["warnings"],
-                "calibrating":   result_dict["calibrating"],
+            # ── Student gets calibration progress only (no score, no warnings) ──
+            await websocket.send_text(json.dumps({
+                "type":           "status",
+                "calibrating":    result_dict["calibrating"],
                 "calib_progress": result_dict["calib_progress"],
-                "new_warning":   result_dict["new_warning"],
-            }
-            await websocket.send_text(json.dumps(student_status))
+            }))
 
-            # ── DynamoDB + S3: log only when a new warning fired ─────
+            # ── DynamoDB + S3: log once per NEW warning ───────────────
+            # The monitor repeats new_warning for every frame of its 3 s hold, so only log
+            # when the cumulative warning count actually increased.
             # A score of 0 only flags the session as PENDING_REVIEW (see dynamo_logger).
             # It never fails, punishes or submits the student — the mentor decides.
-            if result_dict["new_warning"]:
+            if result_dict["new_warning"] and result_dict["warnings"] > last_warn_count:
+                last_warn_count = result_dict["warnings"]
                 event = await log_event(
                     exam_id=exam_id,
                     student_id=student_id,
@@ -360,7 +394,11 @@ async def student_ws(
     finally:
         for event, frames in recorder.flush():      # clips still waiting for post-roll
             _spawn(finish_clip(event, frames))
-        registry.remove_monitor(student_id)
+        registry.detach_monitor(student_id, websocket)
+        try:
+            monitor.close()
+        except Exception as exc:
+            logger.warning("Monitor close failed (%s): %s", student_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +408,11 @@ async def student_ws(
 @app.websocket("/ws/faculty/{student_id}")
 async def faculty_ws(websocket: WebSocket, student_id: str):
     await websocket.accept()
+
+    # Live video and scores are for staff only (same first-message token handshake).
+    caller = await authenticate_ws(websocket, expected_uid=None, roles=("mentor", "admin"))
+    if caller is None:
+        return
     logger.info("Faculty connected, watching student=%s", student_id)
 
     registry.add_faculty(student_id, websocket)

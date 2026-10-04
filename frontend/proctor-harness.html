@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Proctoring hook harness (dev only)</title>
+  </head>
+  <body>
+    <!-- DEV/TEST ONLY: mounts the real useProctoring hook without Firebase login or Firestore.
+         Served by `vite dev`; NOT part of `vite build`. Used by backend/tests/e2e_browser_proctor.py -->
+    <div id="root"></div>
+    <script type="module" src="/src/harness/main.jsx"></script>
+  </body>
+</html>

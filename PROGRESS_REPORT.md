@@ -145,6 +145,14 @@ Added after the first version of this report. Full description in `PLATFORM_IMPL
 - New backend deps: `google-auth`, `requests`, `imageio-ffmpeg` (`backend/requirements_web.txt`); tests: `backend/requirements_test.txt`.
 - The `/ws/faculty/{student_id}` live feed is still unauthenticated.
 
+## 9c. Update — Student browser/webcam integration
+
+See `PLATFORM_IMPLEMENTATION.md` §13. The exam room now uses one camera stream with a preview step before the
+exam, sends ~2 FPS frames over an authenticated WebSocket to the real ML pipeline, reconnects on drops
+(restoring the score server-side), and never shows the student their score or warnings.
+Real-browser + real-ML + real-AWS test passed (see the e2e script); the Firebase login and the Firestore
+parts of ExamRoom were not exercised by it.
+
 ## 10. Git state
 
 Nothing was committed or pushed by Claude (per your instruction). Uncommitted changes at the time of writing:
