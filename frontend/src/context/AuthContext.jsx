@@ -14,14 +14,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        setUser(firebaseUser);
-        // Fetch role from Firestore
-        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (snap.exists()) {
-          setRole(snap.data().role);
-        } else {
-          setRole(null);
+        // Hold the route guards until the role is fetched, so they never
+        // see a signed-in user with a missing or stale role.
+        setLoading(true);
+        let fetchedRole = null;
+        try {
+          const snap = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (snap.exists()) fetchedRole = snap.data().role;
+        } catch (err) {
+          console.error("Failed to fetch user role:", err);
         }
+        setRole(fetchedRole);
+        setUser(firebaseUser);
       } else {
         setUser(null);
         setRole(null);

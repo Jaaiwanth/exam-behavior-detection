@@ -42,7 +42,12 @@ export default function StudentHistory() {
       ) : (
         <div className="exam-list">
           {results.map(r => (
-            <div key={r.id} className="exam-card live">
+            <div
+              key={r.id}
+              className="exam-card live"
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate(`/results/${r.exam_id}`)}
+            >
               <div className="exam-info">
                 <h3>{r.exam_title || "Exam"}</h3>
                 <div className="exam-meta-row">

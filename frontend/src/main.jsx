@@ -11,6 +11,8 @@ import AdminApproval    from "./pages/AdminApproval.jsx";
 import StudentDashboard from "./pages/StudentDashboard.jsx";
 import MentorDashboard  from "./pages/MentorDashboard.jsx";
 import StudentHistory   from "./pages/StudentHistory.jsx";
+import ExamRoom         from "./pages/ExamRoom.jsx";
+import Results          from "./pages/Results.jsx";
 import "./index.css";
 
 // Protected route — redirects to landing if not logged in
@@ -51,6 +53,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           }
         />
 
+        <Route
+          path="/exam/:examId"
+          element={
+            <ProtectedRoute allowedRoles={["student"]}>
+              <ExamRoom />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/results/:examId"
+          element={
+            <ProtectedRoute allowedRoles={["student"]}>
+              <Results />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/student/history"
           element={

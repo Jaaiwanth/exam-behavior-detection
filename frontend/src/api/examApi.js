@@ -3,7 +3,7 @@
 import {
   collection, doc, setDoc, getDoc, getDocs,
   addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp,
+  query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -285,11 +285,17 @@ export async function getStudentHistory(studentUid) {
 
 /** Get all results for an exam (for leaderboard) */
 export async function getExamLeaderboard(examId) {
-  const q = query(
-    collection(db, "results"),
-    where("exam_id", "==", examId),
-    orderBy("percentage", "desc")
-  );
+  // Sorted client-side to avoid needing a Firestore composite index.
+  // Equal scores share a rank (1, 2, 2, 4).
+  const q = query(collection(db, "results"), where("exam_id", "==", examId));
   const snap = await getDocs(q);
-  return snap.docs.map((d, i) => ({ id: d.id, rank: i + 1, ...d.data() }));
+  const rows = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => b.percentage - a.percentage);
+  const ranked = [];
+  rows.forEach((r, i) => {
+    const tied = i > 0 && r.percentage === rows[i - 1].percentage;
+    ranked.push({ ...r, rank: tied ? ranked[i - 1].rank : i + 1 });
+  });
+  return ranked;
 }

@@ -167,35 +167,35 @@ Invalid rows (bad answer letter / missing options) are skipped with a warning. A
 
 ---
 
-### Phase C — Student Exam Flow (Pending)
+### Phase C — Student Exam Flow (Done — needs manual test)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Course list and enrolled course | Pending | Student dashboard |
-| Exam list (live/closed indicator) | Pending | Under each course |
-| Webcam permission gate | Pending | Before exam starts |
-| Fullscreen lock on exam start | Pending | `requestFullscreen()` API |
-| Random N-of-bank question assignment | Pending | Seeded per student, stored in Firestore |
-| MCQ exam UI (20 questions) | Pending | All questions scrollable |
-| Countdown timer (10 min) | Pending | Auto-submit on expiry |
+| Course list and enrolled course | Done | Student dashboard |
+| Exam list (live/closed indicator) | Done | Under each course |
+| Webcam permission gate | Done | Before exam starts |
+| Fullscreen lock on exam start | Done | `requestFullscreen()` API |
+| Random N-of-bank question assignment | Done | Seeded per student, stored in Firestore |
+| MCQ exam UI (20 questions) | Done | All questions scrollable |
+| Countdown timer (10 min) | Done | Auto-submit on expiry |
 | ML monitoring via WebSocket | Exists | `monitor_session.py` + `main.py` done |
 | Behaviour count logged silently | Exists | DynamoDB `exam_events` table |
-| Student sees only question + webcam | Pending | Hide score/warnings during exam |
-| Manual submit | Pending | Submit button + confirm dialog |
-| Auto submit on timer expiry | Pending | `setTimeout` triggers submit |
+| Student sees only question + webcam | Done | Hide score/warnings during exam |
+| Manual submit | Done | Submit button + confirm dialog |
+| Auto submit on timer expiry | Done | `setTimeout` triggers submit |
 
 ---
 
-### Phase D — Results and Analytics (Pending)
+### Phase D — Results and Analytics (Done — needs manual test)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Answer evaluation on submit | Pending | Compare to `correct` in Firestore |
-| Score calculation | Pending | Correct / total x 100 |
-| Topic-wise breakdown | Pending | Group by `topic` field per question |
-| Result stored in Firestore | Pending | `results/{examId}__{uid}` |
-| Student result page | Pending | Score + 4 visual charts |
-| Exam history page | Pending | Past exam results list |
+| Answer evaluation on submit | Done | Compare to `correct` in Firestore |
+| Score calculation | Done | Correct / total x 100 |
+| Topic-wise breakdown | Done | Group by `topic` field per question |
+| Result stored in Firestore | Done | `results/{examId}__{uid}` |
+| Student result page | Done | Score + 4 visual charts |
+| Exam history page | Done | Past exam results list |
 
 **4 Visuals on student result page:**
 
@@ -236,16 +236,18 @@ frontend/src/
     AdminApproval.jsx           Admin approve/reject mentors            [Done]
     StudentExam.jsx             Exam taking page                        [Existing]
     FacultyDashboard.jsx        Live monitoring dashboard               [Existing]
-    StudentDashboard.jsx        Course list, exam list                  [Todo]
-    MentorDashboard.jsx         Full mentor panel                       [Todo]
-    ExamRoom.jsx                Fullscreen exam with timer              [Todo]
-    Results.jsx                 Score + charts                          [Todo]
+    StudentDashboard.jsx        Course list, exam list                  [Done]
+    MentorDashboard.jsx         Full mentor panel                       [Done]
+    ExamRoom.jsx                Fullscreen exam with timer              [Done]
+    Results.jsx                 Score + charts                          [Done]
 
   components/
     MonitoringStatus.jsx        Behaviour monitoring indicator          [Existing]
     QuizQuestion.jsx            Single MCQ card                        [Existing]
-    Timer.jsx                   Countdown timer                         [Todo]
-    TopicChart.jsx              Topic-wise bar chart                    [Todo]
+    Timer.jsx                   Countdown timer                         [Done]
+    TopicChart.jsx              Topic-wise bar chart                    [Done]
+    ScoreGauge.jsx              Circular score ring                     [Done]
+    TrendChart.jsx              Score trend line                        [Done]
     Leaderboard.jsx             Rank table                              [Todo]
 
   api/
@@ -312,8 +314,8 @@ py -3.11 -m uvicorn backend.main:app --reload --port 8000
 ```
 Phase A — Auth          85%   Routes, pages, Firebase auth all done
 Phase B — Exam setup    90%   Mentor dashboard + examApi + student enroll done; untested against live Firestore
-Phase C — Exam room     15%   ML backend exists, UI pending
-Phase D — Results        0%   Not started
+Phase C — Exam room     90%   ExamRoom + Timer done; untested end-to-end with backend
+Phase D — Results       90%   Results page, 4 charts, history done; untested with live data
 Phase E — Mentor dash   10%   Live feed exists, analytics pending
 ```
 
