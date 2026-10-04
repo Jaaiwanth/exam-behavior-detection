@@ -727,3 +727,6 @@ button:disabled, .exam-start-btn.disabled { opacity: .5; cursor: not-allowed; }
 .review-opt.is-wrong { background: var(--danger-bg); color: var(--danger); }
 .review-tag { margin-left: 8px; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; opacity: .85; }
 @media (max-width: 800px) { .review-opts { grid-template-columns: 1fr; } }
+
+.student-input { width: 100%; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font: inherit; padding: 10px 12px; margin-bottom: 12px; resize: vertical; }
+.student-input:focus { outline: none; border-color: var(--accent); }

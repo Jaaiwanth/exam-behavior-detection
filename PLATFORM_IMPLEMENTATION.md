@@ -12,7 +12,7 @@ An end-to-end AI-proctored online examination platform with three user roles:
 
 | Role | Access |
 |------|--------|
-| **Student** | Register, take exams, view results & history |
+| **Student** | Register, take exams in courses a mentor added them to, view results & history |
 | **Mentor** | Upload questions, create exams, view student analytics |
 | **Admin** (Jaaiwanth) | Approve/reject mentor signup requests |
 
@@ -151,7 +151,7 @@ results/
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Course creation by mentor | Done | Single course: "AWS Cloud Architect" |
-| Student enrollment to course | Done | `StudentDashboard.jsx` |
+| Mentor adds/removes students in a course | Done | Mentor dashboard, Students tab (by reg no or email); students cannot self-enroll |
 | Excel upload (question bank) | Done | 6-col format |
 | Question bank stored in Firestore | Done | `questions/{examId}/bank/` |
 | Exam creation (title, pick N, duration) | Done | Mentor sets random pick count |
@@ -171,7 +171,7 @@ Invalid rows (bad answer letter / missing options) are skipped with a warning. A
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Course list and enrolled course | Done | Student dashboard |
+| Course list (only courses the mentor added them to) | Done | Student dashboard |
 | Exam list (live/closed indicator) | Done | Under each course |
 | Webcam permission gate | Done | Before exam starts |
 | Fullscreen lock on exam start | Done | `requestFullscreen()` API |
@@ -210,7 +210,7 @@ Invalid rows (bad answer letter / missing options) are skipped with a warning. A
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Student list per course | Pending | Firestore enrollments query |
+| Student list per course | Done | Mentor dashboard, Students tab |
 | Per-student result view | Pending | Same 4 charts for any student |
 | Leaderboard per exam | Pending | Ranked by score descending |
 | Live monitoring | Exists | Faculty WebSocket in `main.py` |

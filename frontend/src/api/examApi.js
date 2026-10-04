@@ -38,7 +38,7 @@ export async function getMentorCourses(mentorUid) {
    ENROLLMENTS
 ───────────────────────────────────────────────────────────── */
 
-/** Enroll a student in a course */
+/** Enroll a student in a course (called by the mentor — students cannot self-enroll) */
 export async function enrollStudent(courseId, studentUid) {
   const id = `${courseId}__${studentUid}`;
   await setDoc(doc(db, "enrollments", id), {
@@ -46,6 +46,42 @@ export async function enrollStudent(courseId, studentUid) {
     course_id: courseId,
     enrolled_at: serverTimestamp(),
   });
+}
+
+/** Remove a student from a course */
+export async function unenrollStudent(courseId, studentUid) {
+  await deleteDoc(doc(db, "enrollments", `${courseId}__${studentUid}`));
+}
+
+/**
+ * Find a registered student by email or registration number.
+ * Returns { uid, name, email, reg_no } or null.
+ */
+export async function findStudent(identifier) {
+  const id = identifier.trim();
+  if (!id) return null;
+  const [field, variants] = id.includes("@")
+    ? ["email", [id, id.toLowerCase()]]
+    : ["reg_no", [id, id.toUpperCase()]];
+
+  for (const value of [...new Set(variants)]) {
+    const snap = await getDocs(query(collection(db, "users"), where(field, "==", value)));
+    const hit = snap.docs.find(d => d.data().role === "student");
+    if (hit) return { uid: hit.id, ...hit.data() };
+  }
+  return null;
+}
+
+/** Get profiles ({uid, name, email, reg_no}) of every student enrolled in a course */
+export async function getCourseStudentProfiles(courseId) {
+  const uids = await getCourseStudents(courseId);
+  const profiles = await Promise.all(
+    uids.map(async uid => {
+      const snap = await getDoc(doc(db, "users", uid));
+      return snap.exists() ? { uid, ...snap.data() } : { uid, name: "(unknown)" };
+    })
+  );
+  return profiles.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 }
 
 /** Get all course IDs a student is enrolled in */

@@ -8,7 +8,6 @@ import { useAuth } from "../context/AuthContext";
 import {
   getAllCourses,
   getStudentEnrollments,
-  enrollStudent,
   getCourseExams,
 } from "../api/examApi";
 
@@ -23,7 +22,6 @@ export default function StudentDashboard() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [exams, setExams]             = useState([]);
   const [loading, setLoading]         = useState(true);
-  const [enrolling, setEnrolling]     = useState(null);
 
   useEffect(() => {
     if (user) loadData();
@@ -42,13 +40,6 @@ export default function StudentDashboard() {
     setLoading(false);
   }
 
-  async function handleEnroll(courseId) {
-    setEnrolling(courseId);
-    await enrollStudent(courseId, user.uid);
-    setEnrolledIds(prev => [...prev, courseId]);
-    setEnrolling(null);
-  }
-
   async function openCourse(course) {
     setSelectedCourse(course);
     setActiveTab("exams");
@@ -64,7 +55,6 @@ export default function StudentDashboard() {
   if (loading) return <div className="loading-spinner">Loading dashboard...</div>;
 
   const enrolledCourses = courses.filter(c => enrolledIds.includes(c.id));
-  const availableCourses = courses.filter(c => !enrolledIds.includes(c.id));
 
   return (
     <div className="dashboard-root">
@@ -113,7 +103,7 @@ export default function StudentDashboard() {
           <div className="fade-in">
             <div className="page-header">
               <h1>My Courses</h1>
-              <p>Enroll in a course to access exams</p>
+              <p>Courses your mentor has added you to</p>
             </div>
 
             {/* Enrolled courses */}
@@ -133,33 +123,10 @@ export default function StudentDashboard() {
               </section>
             )}
 
-            {/* Available courses */}
-            {availableCourses.length > 0 && (
-              <section className="section">
-                <h2 className="section-title">Available Courses</h2>
-                <div className="course-grid">
-                  {availableCourses.map(c => (
-                    <div key={c.id} className="course-card">
-                      <div className="course-icon">📘</div>
-                      <h3>{c.name}</h3>
-                      <p className="course-meta">Not enrolled</p>
-                      <button
-                        className="course-btn enroll-btn"
-                        onClick={() => handleEnroll(c.id)}
-                        disabled={enrolling === c.id}
-                      >
-                        {enrolling === c.id ? "Enrolling..." : "Enroll Now"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {courses.length === 0 && (
+            {enrolledCourses.length === 0 && (
               <div className="empty-state">
                 <span>📭</span>
-                <p>No courses available yet. Check back later!</p>
+                <p>You have not been added to any course yet. Ask your mentor to add you.</p>
               </div>
             )}
           </div>

@@ -14,7 +14,10 @@ import {
   uploadQuestions,
   getQuestionBank,
   setExamLive,
-  getCourseStudents,
+  getCourseStudentProfiles,
+  findStudent,
+  enrollStudent,
+  unenrollStudent,
   getExamLeaderboard,
 } from "../api/examApi";
 
@@ -46,6 +49,12 @@ export default function MentorDashboard() {
   const [uploadPreview, setUploadPreview] = useState([]);
   const [uploading, setUploading]       = useState(false);
   const [uploadMsg, setUploadMsg]       = useState("");
+
+  // Students tab
+  const [students, setStudents]         = useState([]);
+  const [studentInput, setStudentInput] = useState("");
+  const [addingStudents, setAddingStudents] = useState(false);
+  const [studentMsgs, setStudentMsgs]   = useState([]);
 
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState(false);
@@ -83,6 +92,46 @@ export default function MentorDashboard() {
     ]);
     setQuestions(bank);
     setLeaderboard(lb);
+  }
+
+  /* ── Students ──────────────────────────────────────────── */
+  async function openStudents() {
+    setActiveTab("students");
+    setStudentMsgs([]);
+    setStudents(await getCourseStudentProfiles(selectedCourse.id));
+  }
+
+  async function handleAddStudents(e) {
+    e.preventDefault();
+    const ids = [...new Set(studentInput.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean))];
+    if (!ids.length) return;
+    setAddingStudents(true);
+    const enrolledUids = new Set(students.map(st => st.uid));
+    const msgs = [];
+    for (const id of ids) {
+      try {
+        const st = await findStudent(id);
+        if (!st) msgs.push({ ok: false, text: `${id}: no registered student found` });
+        else if (enrolledUids.has(st.uid)) msgs.push({ ok: false, text: `${id}: already in this course` });
+        else {
+          await enrollStudent(selectedCourse.id, st.uid);
+          enrolledUids.add(st.uid);
+          msgs.push({ ok: true, text: `${st.name} (${id}) added` });
+        }
+      } catch (err) {
+        msgs.push({ ok: false, text: `${id}: ${err.message}` });
+      }
+    }
+    setStudentMsgs(msgs);
+    if (msgs.some(m => m.ok)) setStudentInput("");
+    setStudents(await getCourseStudentProfiles(selectedCourse.id));
+    setAddingStudents(false);
+  }
+
+  async function handleRemoveStudent(st) {
+    if (!window.confirm(`Remove ${st.name || st.uid} from ${selectedCourse.name}?`)) return;
+    await unenrollStudent(selectedCourse.id, st.uid);
+    setStudents(prev => prev.filter(x => x.uid !== st.uid));
   }
 
   /* ── Create Course ─────────────────────────────────────── */
@@ -267,6 +316,14 @@ export default function MentorDashboard() {
               📝 Exams
             </button>
           )}
+          {selectedCourse && (
+            <button
+              className={`nav-item sub ${activeTab === "students" ? "active" : ""}`}
+              onClick={openStudents}
+            >
+              👥 Students
+            </button>
+          )}
           {selectedExam && (
             <button
               className={`nav-item sub ${activeTab === "examDetail" ? "active" : ""}`}
@@ -333,9 +390,12 @@ export default function MentorDashboard() {
                 <h1>{selectedCourse.name}</h1>
                 <p>Exams in this course</p>
               </div>
-              <button className="action-btn" onClick={() => setShowCreateExam(true)}>
-                + New Exam
-              </button>
+              <div className="exam-actions">
+                <button className="modal-cancel" onClick={openStudents}>👥 Students</button>
+                <button className="action-btn" onClick={() => setShowCreateExam(true)}>
+                  + New Exam
+                </button>
+              </div>
             </div>
 
             {exams.length === 0 ? (
@@ -378,6 +438,67 @@ export default function MentorDashboard() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* STUDENTS TAB */}
+        {activeTab === "students" && selectedCourse && (
+          <div className="fade-in">
+            <div className="page-header">
+              <div>
+                <button className="back-link" onClick={() => setActiveTab("exams")}>
+                  ← Exams
+                </button>
+                <h1>{selectedCourse.name} — Students</h1>
+                <p>Only students you add here can see this course and take its exams</p>
+              </div>
+            </div>
+
+            <div className="detail-grid">
+              <section className="detail-card">
+                <h2>➕ Add Students</h2>
+                <p className="detail-hint">
+                  Enter registration numbers or emails, one per line or comma-separated.
+                  Students must have signed up first.
+                </p>
+                <form onSubmit={handleAddStudents}>
+                  <textarea
+                    className="student-input"
+                    rows={5}
+                    placeholder={"21BCE1234\nstudent@college.edu"}
+                    value={studentInput}
+                    onChange={e => setStudentInput(e.target.value)}
+                  />
+                  <button type="submit" className="action-btn" disabled={addingStudents || !studentInput.trim()}>
+                    {addingStudents ? "Adding..." : "Add to Course"}
+                  </button>
+                </form>
+                {studentMsgs.map((m, i) => (
+                  <div key={i} className={`alert ${m.ok ? "success" : "error"}`}>{m.text}</div>
+                ))}
+              </section>
+
+              <section className="detail-card">
+                <h2>👥 Enrolled ({students.length})</h2>
+                {students.length === 0 ? (
+                  <p className="detail-hint">No students added yet.</p>
+                ) : (
+                  <div className="question-list">
+                    {students.map(st => (
+                      <div key={st.uid} className="question-row">
+                        <span className="q-text">
+                          {st.name}
+                          <span className="q-topic"> · {st.reg_no || st.email}</span>
+                        </span>
+                        <button className="modal-cancel" onClick={() => handleRemoveStudent(st)}>
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
         )}
 
