@@ -24,17 +24,17 @@ export default function ResultsView({ bundle }) {
         </div>
       </section>
 
-      {/* 2. Topic bars */}
+      {/* 2. Trend */}
       <section className="detail-card">
+        <h2>Performance Trend</h2>
+        <TrendChart points={trend} />
+      </section>
+
+      {/* 3. Topic bars */}
+      <section className="detail-card full-width">
         <h2>Topic-wise Performance</h2>
         <p className="detail-hint">Weakest topics first</p>
         <TopicChart topicScores={result.topic_scores} />
-      </section>
-
-      {/* 3. Trend */}
-      <section className="detail-card full-width">
-        <h2>Performance Trend</h2>
-        <TrendChart points={trend} />
       </section>
 
       {/* 4. Answer review */}

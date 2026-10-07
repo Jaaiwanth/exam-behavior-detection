@@ -29,7 +29,13 @@ export default function TrendChart({ points }) {
             <title>{`${p.label}: ${p.pct}%`}</title>
           </circle>
           {(points.length <= 8 || i === 0 || i === points.length - 1) && (
-            <text x={x(i)} y={H - 8} textAnchor="middle" fill="var(--text-muted)" fontSize="10">
+            <text 
+              x={x(i)} 
+              y={H - 8} 
+              textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"} 
+              fill="var(--text-muted)" 
+              fontSize="10"
+            >
               {p.label.length > 10 ? p.label.slice(0, 9) + "…" : p.label}
             </text>
           )}

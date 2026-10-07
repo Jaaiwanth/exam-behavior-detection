@@ -15,6 +15,7 @@ import ExamRoom         from "./pages/ExamRoom.jsx";
 import Results          from "./pages/Results.jsx";
 import FacultyDashboard from "./pages/FacultyDashboard.jsx";
 import "./index.css";
+import "./premium-results.css";
 
 // Live monitor for one student (uid taken from the URL)
 function LiveMonitor() {
