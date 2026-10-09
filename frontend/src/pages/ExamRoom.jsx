@@ -361,7 +361,7 @@ export default function ExamRoom() {
       {cameraLost && !submitting && (
         <div className="modal-overlay" style={{ zIndex: 210 }}>
           <div className="modal">
-            <h2>📷 Camera problem</h2>
+            <h2 style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}><CameraIcon size={24} /> Camera problem</h2>
             <p style={{ color: "var(--text-secondary)" }}>
               {cameraError || "Your camera stopped."} Reconnect it to continue. The timer is still running.
             </p>

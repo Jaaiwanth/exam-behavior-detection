@@ -8,6 +8,7 @@ import {
   REVIEW_LABELS,
   REVIEW_BADGE,
 } from "../api/events";
+import { Flag, AlertTriangle, Check } from "lucide-react";
 
 export default function BehaviourReview({ student, examId, examTitle }) {
   const [data, setData]       = useState(null);
@@ -81,7 +82,7 @@ export default function BehaviourReview({ student, examId, examTitle }) {
   return (
     <section className="detail-card" style={{ marginBottom: 20 }}>
       <div className="review-header">
-        <h2>🚩 Behaviour Log</h2>
+        <h2 style={{ display: "flex", alignItems: "center", gap: "8px" }}><Flag size={24} /> Behaviour Log</h2>
         <span className={`badge ${REVIEW_BADGE[status]}`}>{REVIEW_LABELS[status]}</span>
       </div>
 
@@ -168,11 +169,11 @@ export default function BehaviourReview({ student, examId, examTitle }) {
                 onChange={e => setNotes(e.target.value)}
               />
               <div className="exam-actions">
-                <button className="live-toggle-btn" disabled={saving} onClick={() => decide("CLEARED")}>
-                  ✓ Clear student
+                <button className="live-toggle-btn" disabled={saving} onClick={() => decide("CLEARED")} style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
+                  <Check size={16} /> Clear student
                 </button>
-                <button className="live-toggle-btn live" disabled={saving} onClick={() => decide("CONFIRMED_VIOLATION")}>
-                  ⚠ Confirm violation
+                <button className="live-toggle-btn live" disabled={saving} onClick={() => decide("CONFIRMED_VIOLATION")} style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
+                  <AlertTriangle size={16} /> Confirm violation
                 </button>
               </div>
               {saveMsg && <p className="detail-hint" style={{ marginTop: 10 }}>{saveMsg}</p>}

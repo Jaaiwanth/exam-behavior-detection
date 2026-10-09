@@ -1,6 +1,7 @@
-﻿// src/components/MonitoringStatus.jsx
+// src/components/MonitoringStatus.jsx
 // Reusable monitoring status badge shown in student and faculty views.
 import React from "react";
+import { AlertTriangle } from "lucide-react";
 
 export default function MonitoringStatus({ status }) {
   if (!status) return null;
@@ -75,9 +76,12 @@ export default function MonitoringStatus({ status }) {
             fontSize: "0.8rem",
             color: "var(--danger)",
             animation: "warning-flash 1s ease infinite",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          ⚠ {new_warning}
+          <AlertTriangle size={16} /> {new_warning}
         </div>
       )}
 

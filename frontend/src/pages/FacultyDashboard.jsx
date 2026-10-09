@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import MonitoringStatus from "../components/MonitoringStatus.jsx";
 import { openSocket, sendJSON } from "../api/websocket.js";
 import { auth } from "../firebase";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, Camera, Hourglass } from "lucide-react";
 
 export default function FacultyDashboard({ studentId = "s001" }) {
   const [analysis, setAnalysis]     = useState(null);
@@ -79,7 +79,7 @@ export default function FacultyDashboard({ studentId = "s001" }) {
       {/* Header */}
       <header style={{
         position: "sticky", top: 0, zIndex: 100,
-        background: "rgba(13,15,26,0.92)", backdropFilter: "blur(12px)",
+        background: "rgba(255, 255, 255, 0.92)", backdropFilter: "blur(12px)",
         borderBottom: "1px solid var(--border)",
         padding: "12px 24px",
         display: "flex", alignItems: "center", justifyContent: "space-between"
@@ -108,7 +108,7 @@ export default function FacultyDashboard({ studentId = "s001" }) {
               <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Student Camera</span>
               {hasFrames && <span className="badge badge-danger" style={{ fontSize: "0.68rem", animation: "warning-flash 2s ease infinite" }}>● REC</span>}
             </div>
-            <div style={{ aspectRatio: "16/9", background: "#0a0b12", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            <div style={{ aspectRatio: "16/9", background: "var(--bg-surface)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               {/* img is always mounted so imgRef is valid; hidden until first frame */}
               <img
                 ref={imgRef}
@@ -118,7 +118,7 @@ export default function FacultyDashboard({ studentId = "s001" }) {
               {/* Overlay: show when no frame received yet */}
               {!hasFrames && (
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
-                  <div style={{ fontSize: "2.5rem" }}>📷</div>
+                  <Camera size={40} color="var(--text-muted)" strokeWidth={1.5} />
                   <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
                     {wsConnected ? "Waiting for student to start exam..." : "Disconnected — reconnecting..."}
                   </p>
@@ -225,8 +225,8 @@ export default function FacultyDashboard({ studentId = "s001" }) {
                 </div>
               </>
             ) : (
-              <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)" }}>
-                <div style={{ fontSize: "2rem", marginBottom: "8px" }}>⏳</div>
+              <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ marginBottom: "12px" }}><Hourglass size={32} strokeWidth={1.5} /></div>
                 <p style={{ fontSize: "0.85rem" }}>Waiting for student...</p>
               </div>
             )}
